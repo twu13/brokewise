@@ -6,7 +6,7 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase
 import requests
 from nanoid import generate
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from sqlalchemy import text
 
 # Configure logging
@@ -53,7 +53,7 @@ exchange_rates_cache = {
 def get_exchange_rates(base_currency="USD"):
     global exchange_rates_cache
 
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     if (exchange_rates_cache['last_updated'] is None or 
         now - exchange_rates_cache['last_updated'] > timedelta(hours=1) or
         exchange_rates_cache['rates'] is None or
@@ -83,8 +83,8 @@ def cleanup_old_groups():
     """Remove expense groups that haven't been accessed in 90 days"""
     try:
         from models import ExpenseGroup
-        cutoff_date = datetime.utcnow() - timedelta(days=90)
-        old_groups = ExpenseGroup.query.filter(ExpenseGroup.last_accessed < cutoff_date).all()
+        cutoff_date = datetime.now(UTC) - timedelta(days=90)
+        old_groups = db.session.query(ExpenseGroup).filter(ExpenseGroup.last_accessed < cutoff_date).all()
         for group in old_groups:
             db.session.delete(group)
         db.session.commit()
@@ -104,20 +104,20 @@ def expense_group(group_id):
     if random.random() < 0.01:
         cleanup_old_groups()
 
-    group = ExpenseGroup.query.get(group_id)
+    group = db.session.get(ExpenseGroup, group_id)
     if not group:
         group = ExpenseGroup(id=group_id, participants=[])
         db.session.add(group)
         db.session.commit()
     else:
-        group.last_accessed = datetime.utcnow()
+        group.last_accessed = datetime.now(UTC)
         db.session.commit()
     return render_template("index.html", group_id=group_id)
 
 @app.route("/api/g/<group_id>", methods=["GET"])
 def get_expenses(group_id):
     from models import ExpenseGroup, Expense
-    group = ExpenseGroup.query.get_or_404(group_id)
+    group = db.session.get_or_404(ExpenseGroup, group_id)
 
     expenses_data = []
     for expense in group.expenses:
@@ -144,7 +144,7 @@ def save_expenses(group_id):
         from models import ExpenseGroup, Expense, ExpensePayer, ExpenseSplit
 
         data = request.json
-        group = ExpenseGroup.query.get(group_id)
+        group = db.session.get(ExpenseGroup, group_id)
         if not group:
             group = ExpenseGroup(id=group_id)
             db.session.add(group)
@@ -208,7 +208,7 @@ def get_exchange_rate(from_currency, to_currency="USD"):
         logger.error(f"Error getting exchange rate: {e}")
         return {
             'rate': 1.0,
-            'timestamp': datetime.utcnow().timestamp(),
+            'timestamp': datetime.now(UTC).timestamp(),
             'error': str(e)
         }
 
@@ -264,7 +264,7 @@ def export_group_data(group_id):
     """Export expense group data as downloadable JSON"""
     from models import ExpenseGroup, Expense
     try:
-        group = ExpenseGroup.query.get_or_404(group_id)
+        group = db.session.get_or_404(ExpenseGroup, group_id)
 
         expenses_data = []
         for expense in group.expenses:
@@ -283,7 +283,7 @@ def export_group_data(group_id):
         export_data = {
             'participants': group.participants,
             'expenses': expenses_data,
-            'exported_at': datetime.utcnow().isoformat(),
+            'exported_at': datetime.now(UTC).isoformat(),
             'group_id': group_id
         }
 
