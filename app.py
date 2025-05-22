@@ -1,7 +1,7 @@
 import os
 import random
 import logging
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, jsonify, redirect, url_for, abort
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase
 import requests
@@ -117,7 +117,9 @@ def expense_group(group_id):
 @app.route("/api/g/<group_id>", methods=["GET"])
 def get_expenses(group_id):
     from models import ExpenseGroup, Expense
-    group = db.session.get_or_404(ExpenseGroup, group_id)
+    group = db.session.get(ExpenseGroup, group_id)
+    if group is None:
+        abort(404)
 
     expenses_data = []
     for expense in group.expenses:
@@ -264,7 +266,9 @@ def export_group_data(group_id):
     """Export expense group data as downloadable JSON"""
     from models import ExpenseGroup, Expense
     try:
-        group = db.session.get_or_404(ExpenseGroup, group_id)
+        group = db.session.get(ExpenseGroup, group_id)
+        if group is None:
+            abort(404)
 
         expenses_data = []
         for expense in group.expenses:
