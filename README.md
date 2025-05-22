@@ -13,13 +13,14 @@ Share expenses, split bills, and manage group finances with ease across multiple
 
 ## Development Setup
 
-1. Make sure you have Python 3.x installed
-2. Install required packages:
+1. Make sure you have Python 3.x installed (recommended: Python 3.12.8)
+2. Install required packages using [uv](https://github.com/astral-sh/uv):
    ```bash
-   pip install flask flask-sqlalchemy psycopg2-binary requests nanoid email-validator gunicorn
+   uv sync
    ```
+   This will install all dependencies specified in `pyproject.toml` and lock them via `uv.lock`.
 
-3. Set up environment variables:
+3. Set up environment variables (you can use a `.env` file in the project root):
    - `DATABASE_URL`: PostgreSQL database connection URL
    - `FLASK_SECRET_KEY`: Secret key for Flask session management (optional, defaults to a development key)
 
@@ -27,12 +28,28 @@ Share expenses, split bills, and manage group finances with ease across multiple
    ```bash
    python run.py
    ```
-   or
-   ```bash
-   python main.py
-   ```
+   The application will be available at `http://localhost:5001`
 
-The application will be available at `http://localhost:5000`
+### Using the Makefile (Recommended)
+
+Common development tasks are available via the Makefile:
+
+- Install dependencies:
+  ```bash
+  make install
+  ```
+- Start the PostgreSQL database (via Docker Compose):
+  ```bash
+  make up
+  ```
+- Run the development server (and start the database if needed):
+  ```bash
+  make dev
+  ```
+- Stop the database:
+  ```bash
+  make down
+  ```
 
 ## Production Deployment
 
@@ -41,3 +58,5 @@ The application is configured to run with Gunicorn in production:
 ```bash
 gunicorn -c gunicorn_config.py 'app:app'
 ```
+
+By default, Gunicorn will bind to port 5000 unless overridden by the `PORT` environment variable.
