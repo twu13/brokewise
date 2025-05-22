@@ -1,23 +1,22 @@
+import logging
 import os
 import random
-import logging
-from flask import Flask, render_template, request, jsonify, redirect, url_for, abort
-from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.orm import DeclarativeBase
+from datetime import UTC, datetime, timedelta
+
 import requests
+from flask import Flask, abort, jsonify, redirect, render_template, request, url_for
+from flask_sqlalchemy import SQLAlchemy
 from nanoid import generate
-from datetime import datetime, timedelta, UTC
-from sqlalchemy import text
+from sqlalchemy.orm import DeclarativeBase
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
+
 
 class Base(DeclarativeBase):
     pass
+
 
 db = SQLAlchemy(model_class=Base)
 app = Flask(__name__)
@@ -41,50 +40,54 @@ db.init_app(app)
 
 with app.app_context():
     import models  # noqa: F401
+
     db.create_all()
 
 # Cache for exchange rates
-exchange_rates_cache = {
-    'rates': None,
-    'timestamp': None,
-    'last_updated': None
-}
+exchange_rates_cache = {"rates": None, "timestamp": None, "last_updated": None}
+
 
 def get_exchange_rates(base_currency="USD"):
     global exchange_rates_cache
 
     now = datetime.now(UTC)
-    if (exchange_rates_cache['last_updated'] is None or 
-        now - exchange_rates_cache['last_updated'] > timedelta(hours=1) or
-        exchange_rates_cache['rates'] is None or
-        base_currency != exchange_rates_cache.get('base_currency')):
+    if (
+        exchange_rates_cache["last_updated"] is None
+        or now - exchange_rates_cache["last_updated"] > timedelta(hours=1)
+        or exchange_rates_cache["rates"] is None
+        or base_currency != exchange_rates_cache.get("base_currency")
+    ):
         try:
             response = requests.get(f"https://api.exchangerate-api.com/v4/latest/{base_currency}")
             data = response.json()
             exchange_rates_cache = {
-                'rates': data['rates'],
-                'timestamp': data['time_last_updated'],
-                'last_updated': now,
-                'base_currency': base_currency
+                "rates": data["rates"],
+                "timestamp": data["time_last_updated"],
+                "last_updated": now,
+                "base_currency": base_currency,
             }
         except Exception as e:
             logger.error(f"Error fetching exchange rates: {e}")
-            if exchange_rates_cache['rates'] is None:
+            if exchange_rates_cache["rates"] is None:
                 return {
-                    'rates': {curr: 1.0 for curr in ['USD', 'EUR', 'JPY', 'GBP']},
-                    'timestamp': now.timestamp(),
-                    'error': str(e)
+                    "rates": {curr: 1.0 for curr in ["USD", "EUR", "JPY", "GBP"]},
+                    "timestamp": now.timestamp(),
+                    "error": str(e),
                 }
             logger.warning("Using cached exchange rates due to API error")
 
     return exchange_rates_cache
 
+
 def cleanup_old_groups():
     """Remove expense groups that haven't been accessed in 90 days"""
     try:
         from models import ExpenseGroup
+
         cutoff_date = datetime.now(UTC) - timedelta(days=90)
-        old_groups = db.session.query(ExpenseGroup).filter(ExpenseGroup.last_accessed < cutoff_date).all()
+        old_groups = (
+            db.session.query(ExpenseGroup).filter(ExpenseGroup.last_accessed < cutoff_date).all()
+        )
         for group in old_groups:
             db.session.delete(group)
         db.session.commit()
@@ -92,14 +95,17 @@ def cleanup_old_groups():
         logger.error(f"Error during cleanup: {e}")
         db.session.rollback()
 
+
 @app.route("/")
 def index():
     group_id = generate(size=12)
-    return redirect(url_for('expense_group', group_id=group_id))
+    return redirect(url_for("expense_group", group_id=group_id))
+
 
 @app.route("/g/<group_id>")
 def expense_group(group_id):
     from models import ExpenseGroup
+
     # Run cleanup occasionally (1% chance per request)
     if random.random() < 0.01:
         cleanup_old_groups()
@@ -114,9 +120,11 @@ def expense_group(group_id):
         db.session.commit()
     return render_template("index.html", group_id=group_id)
 
+
 @app.route("/api/g/<group_id>", methods=["GET"])
 def get_expenses(group_id):
-    from models import ExpenseGroup, Expense
+    from models import ExpenseGroup
+
     group = db.session.get(ExpenseGroup, group_id)
     if group is None:
         abort(404)
@@ -124,26 +132,28 @@ def get_expenses(group_id):
     expenses_data = []
     for expense in group.expenses:
         expense_dict = {
-            'id': expense.id,
-            'description': expense.description,
-            'displayCurrency': expense.display_currency,
-            'date': expense.created_at.isoformat(),
-            'payers': [{'person': p.person, 'amount': p.amount, 'currency': p.currency} 
-                      for p in expense.payers],
-            'splits': [{'person': s.person, 'amount': s.amount, 'currency': s.currency} 
-                      for s in expense.splits]
+            "id": expense.id,
+            "description": expense.description,
+            "displayCurrency": expense.display_currency,
+            "date": expense.created_at.isoformat(),
+            "payers": [
+                {"person": p.person, "amount": p.amount, "currency": p.currency}
+                for p in expense.payers
+            ],
+            "splits": [
+                {"person": s.person, "amount": s.amount, "currency": s.currency}
+                for s in expense.splits
+            ],
         }
         expenses_data.append(expense_dict)
 
-    return jsonify({
-        'participants': group.participants,
-        'expenses': expenses_data
-    })
+    return jsonify({"participants": group.participants, "expenses": expenses_data})
+
 
 @app.route("/api/g/<group_id>", methods=["POST"])
 def save_expenses(group_id):
     try:
-        from models import ExpenseGroup, Expense, ExpensePayer, ExpenseSplit
+        from models import Expense, ExpenseGroup, ExpensePayer, ExpenseSplit
 
         data = request.json
         group = db.session.get(ExpenseGroup, group_id)
@@ -151,38 +161,42 @@ def save_expenses(group_id):
             group = ExpenseGroup(id=group_id)
             db.session.add(group)
 
-        group.participants = data.get('participants', [])
+        group.participants = data.get("participants", [])
 
         # Clear existing expenses
         for expense in group.expenses:
             db.session.delete(expense)
 
         # Add new expenses
-        for exp_data in data.get('expenses', []):
+        for exp_data in data.get("expenses", []):
             expense = Expense(
                 group=group,
-                description=exp_data['description'],
-                display_currency=exp_data['displayCurrency']
+                description=exp_data["description"],
+                display_currency=exp_data["displayCurrency"],
             )
             db.session.add(expense)
 
             # Add payers
-            for payer in exp_data['payers']:
-                db.session.add(ExpensePayer(
-                    expense=expense,
-                    person=payer['person'],
-                    amount=payer['amount'],
-                    currency=payer['currency']
-                ))
+            for payer in exp_data["payers"]:
+                db.session.add(
+                    ExpensePayer(
+                        expense=expense,
+                        person=payer["person"],
+                        amount=payer["amount"],
+                        currency=payer["currency"],
+                    )
+                )
 
             # Add splits
-            for split in exp_data['splits']:
-                db.session.add(ExpenseSplit(
-                    expense=expense,
-                    person=split['person'],
-                    amount=split['amount'],
-                    currency=split['currency']
-                ))
+            for split in exp_data["splits"]:
+                db.session.add(
+                    ExpenseSplit(
+                        expense=expense,
+                        person=split["person"],
+                        amount=split["amount"],
+                        currency=split["currency"],
+                    )
+                )
 
         db.session.commit()
         return jsonify({"status": "success"})
@@ -191,28 +205,27 @@ def save_expenses(group_id):
         db.session.rollback()
         return jsonify({"status": "error", "message": str(e)}), 500
 
+
 @app.route("/api/exchange-rate", methods=["GET"])
 def exchange_rate():
-    from_currency = request.args.get('from', 'USD')
-    to_currency = request.args.get('to', 'USD')
+    from_currency = request.args.get("from", "USD")
+    to_currency = request.args.get("to", "USD")
     rate_data = get_exchange_rate(from_currency, to_currency)
     return jsonify(rate_data)
+
 
 def get_exchange_rate(from_currency, to_currency="USD"):
     rates_data = get_exchange_rates(from_currency)
     try:
         return {
-            'rate': rates_data['rates'][to_currency],
-            'timestamp': rates_data['timestamp'],
-            'source': 'exchangerate-api.com'
+            "rate": rates_data["rates"][to_currency],
+            "timestamp": rates_data["timestamp"],
+            "source": "exchangerate-api.com",
         }
     except Exception as e:
         logger.error(f"Error getting exchange rate: {e}")
-        return {
-            'rate': 1.0,
-            'timestamp': datetime.now(UTC).timestamp(),
-            'error': str(e)
-        }
+        return {"rate": 1.0, "timestamp": datetime.now(UTC).timestamp(), "error": str(e)}
+
 
 @app.route("/calculate", methods=["POST"])
 def calculate():
@@ -232,7 +245,7 @@ def calculate():
             amount = float(payer["amount"])
             if payer["currency"] != base_currency:
                 rate_data = get_exchange_rate(payer["currency"], base_currency)
-                amount *= rate_data['rate']
+                amount *= rate_data["rate"]
             total_paid[payer["person"]] += amount
 
         # Calculate splits
@@ -240,7 +253,7 @@ def calculate():
             amount = float(split["amount"])
             if split["currency"] != base_currency:
                 rate_data = get_exchange_rate(split["currency"], base_currency)
-                amount *= rate_data['rate']
+                amount *= rate_data["rate"]
             total_should_pay[split["person"]] += amount
 
     # Calculate net amounts
@@ -252,19 +265,23 @@ def calculate():
     # Get current exchange rate info
     rate_info = get_exchange_rates(base_currency)
 
-    return jsonify({
-        "settlements": settlements,
-        "exchangeRateInfo": {
-            "timestamp": rate_info['timestamp'],
-            "source": "exchangerate-api.com",
-            "baseCurrency": base_currency
+    return jsonify(
+        {
+            "settlements": settlements,
+            "exchangeRateInfo": {
+                "timestamp": rate_info["timestamp"],
+                "source": "exchangerate-api.com",
+                "baseCurrency": base_currency,
+            },
         }
-    })
+    )
+
 
 @app.route("/api/g/<group_id>/export", methods=["GET"])
 def export_group_data(group_id):
     """Export expense group data as downloadable JSON"""
-    from models import ExpenseGroup, Expense
+    from models import ExpenseGroup
+
     try:
         group = db.session.get(ExpenseGroup, group_id)
         if group is None:
@@ -273,31 +290,38 @@ def export_group_data(group_id):
         expenses_data = []
         for expense in group.expenses:
             expense_dict = {
-                'id': expense.id,
-                'description': expense.description,
-                'displayCurrency': expense.display_currency,
-                'date': expense.created_at.isoformat(),
-                'payers': [{'person': p.person, 'amount': p.amount, 'currency': p.currency} 
-                          for p in expense.payers],
-                'splits': [{'person': s.person, 'amount': s.amount, 'currency': s.currency} 
-                          for s in expense.splits]
+                "id": expense.id,
+                "description": expense.description,
+                "displayCurrency": expense.display_currency,
+                "date": expense.created_at.isoformat(),
+                "payers": [
+                    {"person": p.person, "amount": p.amount, "currency": p.currency}
+                    for p in expense.payers
+                ],
+                "splits": [
+                    {"person": s.person, "amount": s.amount, "currency": s.currency}
+                    for s in expense.splits
+                ],
             }
             expenses_data.append(expense_dict)
 
         export_data = {
-            'participants': group.participants,
-            'expenses': expenses_data,
-            'exported_at': datetime.now(UTC).isoformat(),
-            'group_id': group_id
+            "participants": group.participants,
+            "expenses": expenses_data,
+            "exported_at": datetime.now(UTC).isoformat(),
+            "group_id": group_id,
         }
 
         response = jsonify(export_data)
-        response.headers['Content-Disposition'] = f'attachment; filename=expense_group_{group_id}.json'
+        response.headers["Content-Disposition"] = (
+            f"attachment; filename=expense_group_{group_id}.json"
+        )
         return response
 
     except Exception as e:
         logger.error(f"Error exporting group data: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 # Add health check endpoint
 @app.route("/health")
@@ -305,6 +329,7 @@ def health_check():
     try:
         # Test database connection using properly formatted SQL
         from sqlalchemy import text
+
         db.session.execute(text("SELECT 1"))
         return jsonify({"status": "healthy", "database": "connected"})
     except Exception as e:
