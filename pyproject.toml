@@ -15,3 +15,42 @@ dependencies = [
     "requests>=2.32.3",
     "sqlalchemy>=2.0.37",
 ]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.11.10",
+]
+
+[tool.ruff]
+indent-width = 4
+line-length = 100
+exclude = [                        # Commonly ignored directories
+    ".eggs",
+    ".git",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".pyenv",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "_build",
+    "build",
+    "dist",
+    "venv",
+]
+
+[tool.ruff.lint]
+select = [
+    "E", # pycodestyle
+    "F", # Pyflakes
+    "I", # isort
+]
+fixable = ["ALL"]                  # Fix enabled rules when `--fix` is provided
+
+[tool.ruff.format]
+quote-style = "double"             # Use double quotes
+indent-style = "space"             # Indent with spaces
+skip-magic-trailing-comma = false  # Keep trailing commas
+line-ending = "auto"               # Detect the appropriate line ending
