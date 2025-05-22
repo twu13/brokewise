@@ -1,5 +1,8 @@
 # BrokeWise
 
+[![Tests CI](https://github.com/tonywu/brokewise/actions/workflows/ci.yml/badge.svg)](https://github.com/tonywu/brokewise/actions/workflows/ci.yml)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
 Share expenses, split bills, and manage group finances with ease across multiple currencies.
 
 ## Features
