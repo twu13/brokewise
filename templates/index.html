@@ -13,20 +13,7 @@
                 </div>
             </div>
         </div>
-    </div>
-</div>
-
-<!-- Add this after the share URL section -->
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="alert alert-info d-flex align-items-center">
-            <i class="bi bi-info-circle me-2 fs-4"></i>
-            <div>
-                <strong>Data Retention Policy:</strong> Your expense data will be automatically saved and stored securely. 
-                Expense groups that remain inactive for more than 90 days may be removed to maintain system performance.
-                Make sure to bookmark this URL or save it somewhere safe!
-            </div>
-        </div>
+        <p class="text-muted small mt-1"><i class="bi bi-info-circle me-1"></i>Inactive expense groups may be removed after 90 days.</p>
     </div>
 </div>
 
@@ -60,6 +47,10 @@
                     <button class="nav-link" id="view-expenses-tab" data-bs-toggle="tab" data-bs-target="#view-expenses" type="button" role="tab">
                         <i class="bi bi-table me-2"></i>View Expenses
                     </button>
+                </li><li class="nav-item" role="presentation">
+                    <button class="nav-link" id="settle-expenses-tab" data-bs-toggle="tab" data-bs-target="#settle-expenses" type="button" role="tab">
+                        <i class="bi bi-calculator me-2"></i>Settle Expenses
+                    </button>
                 </li>
             </ul>
         </div>
@@ -79,6 +70,9 @@
             <div class="tab-pane fade" id="view-expenses" role="tabpanel">
                 <!-- Desktop Table View -->
                 <div id="expenseTableContainer" class="card shadow-sm">
+                    <div class="card-header bg-light">
+                        <h4 class="mb-0"><i class="bi bi-table me-2"></i>Expenses</h4>
+                    </div>
                     <div class="card-body">
                         <div class="table-responsive">
                             <table class="table table-hover">
@@ -107,55 +101,54 @@
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
-</div>
+            
+            <!-- Settle Expenses Tab -->
+            <div class="tab-pane fade" id="settle-expenses" role="tabpanel">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-light">
+                        <h4 class="mb-0"><i class="bi bi-calculator me-2"></i>Final Settlement</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="baseCurrency" class="form-label">Base Currency for Settlement</label>
+                            <select class="form-select" id="baseCurrency" style="max-width: 200px;">
+                                <option value="USD">USD - US Dollar</option>
+                                <option value="EUR">EUR - Euro</option>
+                                <option value="JPY">JPY - Japanese Yen</option>
+                                <option value="GBP">GBP - British Pound</option>
+                                <option value="CNY">CNY - Chinese Yuan</option>
+                                <option value="AUD">AUD - Australian Dollar</option>
+                                <option value="CAD">CAD - Canadian Dollar</option>
+                                <option value="CHF">CHF - Swiss Franc</option>
+                                <option value="HKD">HKD - Hong Kong Dollar</option>
+                                <option value="SGD">SGD - Singapore Dollar</option>
+                                <option value="SEK">SEK - Swedish Krona</option>
+                                <option value="KRW">KRW - South Korean Won</option>
+                                <option value="INR">INR - Indian Rupee</option>
+                                <option value="BRL">BRL - Brazilian Real</option>
+                                <option value="RUB">RUB - Russian Ruble</option>
+                                <option value="ZAR">ZAR - South African Rand</option>
+                                <option value="MXN">MXN - Mexican Peso</option>
+                                <option value="IDR">IDR - Indonesian Rupiah</option>
+                                <option value="TRY">TRY - Turkish Lira</option>
+                                <option value="SAR">SAR - Saudi Riyal</option>
+                            </select>
+                        </div>
+                        <div id="exchangeRateInfo" class="text-muted small mb-3">
+                            <!-- Exchange rate info will be displayed here -->
+                        </div>
+                        <button class="btn btn-primary" onclick="calculateSettlement()">
+                            <i class="bi bi-arrow-repeat me-2"></i>Calculate Settlement
+                        </button>
+                        <div id="settlementResults" class="mt-3"></div>
 
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="card shadow-sm">
-            <div class="card-header bg-light">
-                <h4 class="mb-0"><i class="bi bi-calculator me-2"></i>Final Settlement</h4>
-            </div>
-            <div class="card-body">
-                <div class="mb-3">
-                    <label for="baseCurrency" class="form-label">Base Currency for Settlement</label>
-                    <select class="form-select" id="baseCurrency" style="max-width: 200px;">
-                        <option value="USD">USD - US Dollar</option>
-                        <option value="EUR">EUR - Euro</option>
-                        <option value="JPY">JPY - Japanese Yen</option>
-                        <option value="GBP">GBP - British Pound</option>
-                        <option value="CNY">CNY - Chinese Yuan</option>
-                        <option value="AUD">AUD - Australian Dollar</option>
-                        <option value="CAD">CAD - Canadian Dollar</option>
-                        <option value="CHF">CHF - Swiss Franc</option>
-                        <option value="HKD">HKD - Hong Kong Dollar</option>
-                        <option value="SGD">SGD - Singapore Dollar</option>
-                        <option value="SEK">SEK - Swedish Krona</option>
-                        <option value="KRW">KRW - South Korean Won</option>
-                        <option value="INR">INR - Indian Rupee</option>
-                        <option value="BRL">BRL - Brazilian Real</option>
-                        <option value="RUB">RUB - Russian Ruble</option>
-                        <option value="ZAR">ZAR - South African Rand</option>
-                        <option value="MXN">MXN - Mexican Peso</option>
-                        <option value="IDR">IDR - Indonesian Rupiah</option>
-                        <option value="TRY">TRY - Turkish Lira</option>
-                        <option value="SAR">SAR - Saudi Riyal</option>
-                    </select>
-                </div>
-                <div id="exchangeRateInfo" class="text-muted small mb-3">
-                    <!-- Exchange rate info will be displayed here -->
-                </div>
-                <button class="btn btn-primary" onclick="calculateSettlement()">
-                    <i class="bi bi-arrow-repeat me-2"></i>Calculate Settlement
-                </button>
-                <div id="settlementResults" class="mt-3"></div>
-
-                <!-- Add Export button below settlement results -->
-                <div class="mt-4">
-                    <button class="btn btn-teal" onclick="exportToPDF()">
-                        <i class="bi bi-file-earmark-pdf me-1"></i>Export Report to PDF
-                    </button>
+                        <!-- Add Export button below settlement results -->
+                        <div class="mt-4">
+                            <button class="btn btn-teal" onclick="exportToPDF()">
+                                <i class="bi bi-file-earmark-pdf me-1"></i>Export Report to PDF
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
