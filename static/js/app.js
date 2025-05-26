@@ -865,10 +865,14 @@ async function calculateSettlement() {
         const resultsDiv = document.getElementById('settlementResults');
         resultsDiv.innerHTML = '';
 
-        resultsDiv.innerHTML += `
+        // Build the summary card
+        let summaryCardHTML = `
             <div class="card mb-4">
                 <div class="card-header bg-light">
-                    <h6 class="mb-0"><i class="bi bi-table me-2"></i>Summary</h6>
+                    <h5 class="mb-0 d-flex align-items-center">
+                        <i class="bi bi-table me-2"></i>
+                        <span>Summary</span>
+                    </h5>
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
@@ -881,63 +885,70 @@ async function calculateSettlement() {
                                     <th>Net Balance</th>
                                 </tr>
                             </thead>
-                            <tbody>
-                                ${Object.entries(data.settlements).map(([person, amount]) => {
-                                    const totalPaid = savedExpenses.reduce((sum, exp) => {
-                                        const personPaid = exp.payers
-                                            .filter(p => p.person === person)
-                                            .reduce((psum, p) => psum + (p.amount || 0), 0);
-                                        return sum + personPaid;
-                                    }, 0);
+                            <tbody>`;
+                            
+        Object.entries(data.settlements).forEach(([person, amount]) => {
+            const totalPaid = savedExpenses.reduce((sum, exp) => {
+                const personPaid = exp.payers
+                    .filter(p => p.person === person)
+                    .reduce((psum, p) => psum + (p.amount || 0), 0);
+                return sum + personPaid;
+            }, 0);
 
-                                    const shouldPay = totalPaid - amount;
+            const shouldPay = totalPaid - amount;
 
-                                    return `
-                                        <tr>
-                                            <td>${person}</td>
-                                            <td>${baseCurrency} ${totalPaid.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                                            <td>${baseCurrency} ${shouldPay.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                                            <td class="${amount >= 0 ? 'text-success' : 'text-danger'}">
-                                                ${baseCurrency} ${amount >= 0 ? '+' : '-'}${Math.abs(amount).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                                            </td>
-                                        </tr>
-                                    `;
-                                }).join('')}
+            summaryCardHTML += `
+                <tr>
+                    <td>${person}</td>
+                    <td>${baseCurrency} ${totalPaid.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    <td>${baseCurrency} ${shouldPay.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    <td class="${amount >= 0 ? 'text-success' : 'text-danger'}">
+                        ${baseCurrency} ${amount >= 0 ? '+' : '-'}${Math.abs(amount).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                    </td>
+                </tr>`;
+        });
+                            
+        summaryCardHTML += `
                             </tbody>
                         </table>
                     </div>
                 </div>
-            </div>
-        `;
+            </div>`;
+            
+        // Add summary card to results div
+        resultsDiv.innerHTML += summaryCardHTML;
 
-        // Add a card for the Settlement Results section
-        resultsDiv.innerHTML += `
+        // Build the settlement results card
+        let settlementCardHTML = `
             <div class="card mt-4">
                 <div class="card-header bg-light">
-                    <h6 class="mb-0"><i class="bi bi-cash-stack me-2"></i>Settlement Results</h6>
+                    <h5 class="mb-0 d-flex align-items-center">
+                        <i class="bi bi-cash-stack me-2"></i>
+                        <span>Settlement Results</span>
+                    </h5>
                 </div>
-                <div class="card-body">
-        `;
-
+                <div class="card-body">`;
+                
         // Add each person's settlement result
         Object.entries(data.settlements).forEach(([person, amount]) => {
             const amountClass = amount >= 0 ? 'positive-amount' : 'negative-amount';
-            resultsDiv.innerHTML += `
+            settlementCardHTML += `
                 <div class="mb-2">
                     <strong>${person}:</strong>
                     <span class="${amountClass}">
                         ${amount >= 0 ? 'Gets back' : 'Owes'}
                         ${baseCurrency} ${amount >= 0 ? '+' : '-'}${Math.abs(amount).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                     </span>
-                </div>
-            `;
+                </div>`;
         });
 
-        // Close the Settlement Results card
-        resultsDiv.innerHTML += `
+        // Close the settlement results card
+        settlementCardHTML += `
                 </div>
-            </div>
-        `;
+            </div>`;
+            
+        // Add settlement card to results div
+        resultsDiv.innerHTML += settlementCardHTML;
 
         const settlements = data.settlements;
         const debtors = Object.entries(settlements)
@@ -948,15 +959,17 @@ async function calculateSettlement() {
             .sort((a, b) => b[1] - a[1]);
 
         if (creditors.length > 0 && debtors.length > 0) {
-            // Add a separate card for Recommended Transfers
-            resultsDiv.innerHTML += `
+            // Build the recommended transfers card
+            let transfersCardHTML = `
                 <div class="card mt-4">
                     <div class="card-header bg-light">
-                        <h6 class="mb-0"><i class="bi bi-lightbulb me-2"></i>Recommended Transfers</h6>
+                        <h5 class="mb-0 d-flex align-items-center">
+                            <i class="bi bi-lightbulb me-2"></i>
+                            <span>Recommended Transfers</span>
+                        </h5>
                     </div>
                     <div class="card-body">
-                        <p class="text-muted small mb-3">Here's the most efficient way to settle all debts:</p>
-            `;
+                        <p class="text-muted small mb-3">Here's the most efficient way to settle all debts:</p>`;
 
             const mainCreditor = creditors[0];
             // Store transfers for PDF export
@@ -971,13 +984,12 @@ async function calculateSettlement() {
                     currency: baseCurrency
                 });
                 
-                resultsDiv.innerHTML += `
+                transfersCardHTML += `
                     <div class="mb-2">
                         <strong>${debtor}</strong> pays 
                         <strong>${mainCreditor[0]}</strong>: 
                         ${baseCurrency} ${Math.abs(amount).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                    </div>
-                `;
+                    </div>`;
             });
 
             for (let i = 1; i < creditors.length; i++) {
@@ -991,19 +1003,20 @@ async function calculateSettlement() {
                     currency: baseCurrency
                 });
                 
-                resultsDiv.innerHTML += `
+                transfersCardHTML += `
                     <div class="mb-2">
                         <strong>${mainCreditor[0]}</strong> pays 
                         <strong>${creditor}</strong>: 
                         ${baseCurrency} ${amount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                    </div>
-                `;
+                    </div>`;
             }
 
-            resultsDiv.innerHTML += `
+            transfersCardHTML += `
                     </div>
-                </div>
-            `;
+                </div>`;
+                
+            // Add transfers card to results div
+            resultsDiv.innerHTML += transfersCardHTML;
         }
 
         const exchangeRateInfo = document.getElementById('exchangeRateInfo');
