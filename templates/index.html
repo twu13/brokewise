@@ -41,15 +41,15 @@
             <ul class="nav nav-tabs tab-list-mobile" role="tablist">
                 <li class="nav-item" role="presentation">
                     <button class="nav-link active" id="add-expenses-tab" data-bs-toggle="tab" data-bs-target="#add-expenses" type="button" role="tab">
-                        <i class="bi bi-plus-lg me-2"></i>Add Expenses
+                        <i class="bi bi-plus-lg me-2"></i><span class="d-none d-md-inline">Add Expenses</span><span class="d-inline d-md-none">Add</span>
                     </button>
                 </li><li class="nav-item" role="presentation">
                     <button class="nav-link" id="view-expenses-tab" data-bs-toggle="tab" data-bs-target="#view-expenses" type="button" role="tab">
-                        <i class="bi bi-table me-2"></i>View Expenses
+                        <i class="bi bi-table me-2"></i><span class="d-none d-md-inline">View Expenses</span><span class="d-inline d-md-none">View</span>
                     </button>
                 </li><li class="nav-item" role="presentation">
                     <button class="nav-link" id="settle-expenses-tab" data-bs-toggle="tab" data-bs-target="#settle-expenses" type="button" role="tab">
-                        <i class="bi bi-calculator me-2"></i>Settle Expenses
+                        <i class="bi bi-calculator me-2"></i><span class="d-none d-md-inline">Settle Expenses</span><span class="d-inline d-md-none">Settle</span>
                     </button>
                 </li>
             </ul>
@@ -164,40 +164,57 @@
             </div>
             <div class="card-body">
                 <div class="mb-4">
-                    <label class="form-label">Description<span class="text-danger">*</span></label>
+                    <label class="form-label fw-bold">Description<span class="text-danger">*</span></label>
                     <input type="text" class="form-control expense-description" placeholder="What was this expense for?">
                     <div class="form-text">Enter a clear description of the expense</div>
                 </div>
-                <div class="row g-4">
+                
+                <div class="mb-4">
+                    <div class="d-flex align-items-center">
+                        <label for="displayCurrencyMain" class="form-label fw-bold me-2 mb-0">Display Currency:</label>
+                        <select class="form-select display-currency-select currency-select-wide" id="displayCurrencyMain" style="max-width: 200px;" onchange="updateTotals(this)">
+                            <!-- Currency options will be populated dynamically -->
+                        </select>
+                    </div>
+                    <div class="form-text">Choose the currency shown in the expenses table for the expense below (regardless of input currency)</div>
+                </div>
+                
+                <div class="row g-4 justify-content-between">
                     <div class="col-md-5">
-                        <h5><i class="bi bi-credit-card me-2"></i>Who Paid</h5>
-                        <div class="payers-list mb-3"></div>
-                        <button class="btn btn-outline-primary btn-sm" onclick="addPayer(this)">
-                            <i class="bi bi-plus-lg me-1"></i>Add Payer
-                        </button>
-                        <div class="mt-2">
-                            Total Paid: <span class="total-paid badge bg-primary">0.00</span>
-                            <div class="d-flex align-items-center mt-2">
-                                <label class="me-2">Display Currency:</label>
-                                <select class="form-select display-currency-select currency-select-wide" onchange="updateTotals(this)">
-                                    <!-- Currency options will be populated dynamically -->
-                                </select>
+                        <div class="card border-primary mb-3">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="mb-0"><i class="bi bi-credit-card me-2"></i>Who Paid</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="payers-list mb-3"></div>
+                                <button class="btn btn-outline-primary btn-sm" onclick="addPayer(this)">
+                                    <i class="bi bi-plus-lg me-1"></i>Add Payer
+                                </button>
+                                <div class="mt-3 pt-2 border-top">
+                                    <strong>Total Paid: </strong><span class="total-paid badge bg-primary">0.00</span>
+                                </div>
                             </div>
                         </div>
                     </div>
                     <div class="col-md-5">
-                        <div class="d-flex align-items-center justify-content-between">
-                            <h5><i class="bi-diagram-3 me-2"></i>Split Between</h5>
-                            <button class="btn btn-outline-secondary btn-sm" onclick="splitEvenly(this)">
-                                <i class="bi bi-distribute-vertical me-1"></i>Split Evenly
-                            </button>
-                        </div>
-                        <div class="splits-list mb-3"></div>
-                        <button class="btn btn-outline-primary btn-sm" onclick="addSplit(this)">
-                            <i class="bi bi-plus-lg me-1"></i>Add Split
-                        </button>
-                        <div class="mt-2">
-                            Total Split: <span class="total-split badge bg-primary">0.00</span>
+                        <div class="card border-success mb-3">
+                            <div class="card-header bg-success text-white">
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <h5 class="mb-0"><i class="bi-diagram-3 me-2"></i>Split Between</h5>
+                                    <button class="btn btn-sm btn-light" onclick="splitEvenly(this)">
+                                        <i class="bi bi-distribute-vertical me-1"></i>Split Evenly
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="splits-list mb-3"></div>
+                                <button class="btn btn-outline-success btn-sm" onclick="addSplit(this)">
+                                    <i class="bi bi-plus-lg me-1"></i>Add Split
+                                </button>
+                                <div class="mt-3 pt-2 border-top">
+                                    <strong>Total Split: </strong><span class="total-split badge bg-success">0.00</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
