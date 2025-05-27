@@ -368,6 +368,12 @@ function updateAllParticipantSelects() {
 }
 
 function addExpenseRow() {
+    // Check if there are any participants
+    if (participants.length === 0) {
+        alert('No participants have been added. Please add participants first before creating an expense.');
+        return;
+    }
+
     const template = document.getElementById('expenseTemplate');
     const expenseList = document.getElementById('expenseList');
     const clone = template.content.cloneNode(true);
@@ -401,7 +407,12 @@ function addPayer(btn) {
         updateAllParticipantSelects();
         updateTotals(select);
     } else {
-        alert('All participants have been added as payers');
+        // More accurate message
+        if (participants.length === 0) {
+            alert('No participants have been added to the group');
+        } else {
+            alert('All participants have been added as payers');
+        }
     }
 }
 
@@ -423,7 +434,12 @@ function addSplit(btn) {
         updateAllParticipantSelects();
         updateTotals(select);
     } else {
-        alert('All participants have been added to the split');
+        // More accurate message
+        if (participants.length === 0) {
+            alert('No participants have been added to the group');
+        } else {
+            alert('All participants have been added to the split');
+        }
     }
 }
 
