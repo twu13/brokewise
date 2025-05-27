@@ -682,10 +682,12 @@ async function updateExpenseTable() {
             };
         }));
 
-        // Display only person names for "Who Paid" column (no amounts in parentheses)
-        const payersText = payersWithConvertedAmounts.map(p => p.person).join(', ');
+        // Format "Who Paid" as a organized list with line breaks between participants, identical to "Split Between"
+        const payersText = payersWithConvertedAmounts.map(p =>
+            `<div class="split-item mb-1">${p.person} <span class="text-muted">(${p.originalAmount})</span></div>`
+        ).join('');
 
-        // Format "Split Between" as a more organized list with line breaks between participants
+        // Format "Split Between" as a organized list with line breaks between participants
         const splitsText = splitsWithConvertedAmounts.map(s =>
             `<div class="split-item mb-1">${s.person} <span class="text-muted">(${s.originalAmount})</span></div>`
         ).join('');
@@ -741,7 +743,7 @@ async function updateExpenseTable() {
             <div class="card-body">
                 <div class="mb-3">
                     <div class="text-muted mb-1"><small>Who Paid</small></div>
-                    <div class="fw-medium">${expense.payersText}</div>
+                    <div>${expense.payersText}</div>
                 </div>
                 <div class="mb-3">
                     <div class="text-muted mb-1"><small>Split Between</small></div>
