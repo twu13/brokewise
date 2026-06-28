@@ -4,10 +4,13 @@ import random
 from datetime import UTC, datetime, timedelta
 
 import requests
+from dotenv import load_dotenv
 from flask import Flask, abort, jsonify, redirect, render_template, request, url_for
 from flask_sqlalchemy import SQLAlchemy
 from nanoid import generate
 from sqlalchemy.orm import DeclarativeBase
+
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")

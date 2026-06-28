@@ -24,7 +24,7 @@ Share expenses, split bills, and manage group finances with ease across multiple
    This will install all dependencies specified in `pyproject.toml` and lock them via `uv.lock`.
 
 3. Set up environment variables (you can use a `.env` file in the project root):
-   - `DATABASE_URL`: PostgreSQL database connection URL
+   - `DATABASE_URL`: PostgreSQL database connection URL, for example `postgresql://postgres:postgres@localhost:5433/brokewise` when using the included Docker Compose database
    - `FLASK_SECRET_KEY`: Secret key for Flask session management (optional, defaults to a development key)
 
 4. Run the development server:

@@ -4,9 +4,15 @@
 .DEFAULT_GOAL := help
 
 # Variables
-PYTHON := python
 UV := uv
+PYTHON := VIRTUAL_ENV= $(UV) run python
 PORT := 5001
+
+ifneq (,$(wildcard .env))
+include .env
+export DATABASE_URL
+export FLASK_SECRET_KEY
+endif
 
 help: ## Display this help message
 	@echo "Usage: make [target]"
@@ -28,4 +34,3 @@ install: ## Install project dependencies
 
 dev: up ## Run the development server (starts database if needed)
 	$(PYTHON) run.py
-	

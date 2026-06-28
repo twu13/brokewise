@@ -51,6 +51,16 @@
     margin-bottom: 0.5rem;
 }
 
+.invalid-entry {
+    border-radius: 0.375rem;
+    box-shadow: 0 0 0 0.2rem rgba(var(--bs-danger-rgb), 0.12);
+}
+
+.invalid-entry .form-control,
+.invalid-entry .form-select {
+    background-color: rgba(var(--bs-danger-rgb), 0.04);
+}
+
 .btn-group {
     gap: 0.5rem;
 }

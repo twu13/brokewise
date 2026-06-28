@@ -403,9 +403,11 @@ function addPayer(btn) {
         .join('');
 
     if (select.options.length > 0) {
+        const amountInput = clone.querySelector('.amount-input');
         payersList.appendChild(clone);
         updateAllParticipantSelects();
         updateTotals(select);
+        amountInput.focus();
     } else {
         // More accurate message
         if (participants.length === 0) {
@@ -481,54 +483,90 @@ async function getExchangeRate(fromCurrency, toCurrency) {
     }
 }
 
+function parseAmountInput(input) {
+    const amount = parseFloat(input.value);
+    return Number.isFinite(amount) ? amount : null;
+}
+
+function amountToCents(amount) {
+    return Math.round(amount * 100);
+}
+
+async function getConvertedCents(entry, displayCurrency) {
+    const amountInput = entry.querySelector('.amount-input');
+    const amount = parseAmountInput(amountInput) || 0;
+    const currency = entry.querySelector('.currency-select').value;
+    const rate = await getExchangeRate(currency, displayCurrency);
+    return amountToCents(amount * rate);
+}
+
+function formatCents(cents) {
+    return (cents / 100).toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+}
+
+function amountsMatchInCents(totalPaidCents, totalSplitCents) {
+    return Math.abs(totalPaidCents - totalSplitCents) <= 1;
+}
+
+function clearEntryValidation(entry) {
+    if (!entry) return;
+
+    entry.classList.remove('invalid-entry');
+    const amountInput = entry.querySelector('.amount-input');
+    if (amountInput) {
+        amountInput.classList.remove('is-invalid');
+    }
+}
+
+function markEntryInvalid(entry) {
+    entry.classList.add('invalid-entry');
+    const amountInput = entry.querySelector('.amount-input');
+    amountInput.classList.add('is-invalid');
+    return amountInput;
+}
+
+function focusInvalidInput(input) {
+    input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    input.focus();
+}
+
 async function updateTotals(element) {
     const expenseEntry = element.closest('.expense-entry');
     const saveBtn = expenseEntry.querySelector('.btn-success');
     saveBtn.disabled = true;
 
     const displayCurrency = expenseEntry.querySelector('.display-currency-select').value;
-    let totalPaid = 0;
-    let totalSplit = 0;
+    let totalPaidCents = 0;
+    let totalSplitCents = 0;
 
     for (const payerEntry of expenseEntry.querySelectorAll('.payer-entry')) {
-        const amount = parseFloat(payerEntry.querySelector('.amount-input').value) || 0;
-        const currency = payerEntry.querySelector('.currency-select').value;
-        const rate = await getExchangeRate(currency, displayCurrency);
-        totalPaid += amount * rate;
+        totalPaidCents += await getConvertedCents(payerEntry, displayCurrency);
     }
 
     for (const splitEntry of expenseEntry.querySelectorAll('.split-entry')) {
-        const amount = parseFloat(splitEntry.querySelector('.amount-input').value) || 0;
-        const currency = splitEntry.querySelector('.currency-select').value;
-        const rate = await getExchangeRate(currency, displayCurrency);
-        totalSplit += amount * rate;
+        totalSplitCents += await getConvertedCents(splitEntry, displayCurrency);
     }
 
-    // Format amounts with commas and always 2 decimal places
-    const formattedTotalPaid = totalPaid.toLocaleString('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    });
-    const formattedTotalSplit = totalSplit.toLocaleString('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    });
-    
     expenseEntry.querySelector('.total-paid').textContent =
-        `${displayCurrency} ${formattedTotalPaid}`;
+        `${displayCurrency} ${formatCents(totalPaidCents)}`;
     expenseEntry.querySelector('.total-split').textContent =
-        `${displayCurrency} ${formattedTotalSplit}`;
+        `${displayCurrency} ${formatCents(totalSplitCents)}`;
 
     const warning = expenseEntry.querySelector('.amounts-mismatch-warning');
-    const amountsMatch = Math.abs(totalPaid - totalSplit) <= 0.01;
+    const amountsMatch = amountsMatchInCents(totalPaidCents, totalSplitCents);
     warning.style.display = amountsMatch ? 'none' : 'block';
     saveBtn.disabled = !amountsMatch;
 }
 
-function saveExpense(btn) {
+async function saveExpense(btn) {
     const expenseEntry = btn.closest('.expense-entry');
     const description = expenseEntry.querySelector('input[type="text"]').value;
     const displayCurrency = expenseEntry.querySelector('.display-currency-select').value;
+    const invalidEntries = expenseEntry.querySelectorAll('.invalid-entry');
+    invalidEntries.forEach(clearEntryValidation);
 
     // Validate description
     if (!description.trim()) {
@@ -537,45 +575,62 @@ function saveExpense(btn) {
     }
 
     // Calculate total amounts and validate payers
-    let totalPaid = 0;
-    const payers = Array.from(expenseEntry.querySelectorAll('.payer-entry')).map(payerEntry => {
-        const amount = parseFloat(payerEntry.querySelector('.amount-input').value);
-        if (isNaN(amount) || amount <= 0) {
-            showErrorToast('Please enter valid positive amounts for all payers.');
-            return null;
+    let totalPaidCents = 0;
+    let firstInvalidInput = null;
+    const payers = [];
+    for (const payerEntry of expenseEntry.querySelectorAll('.payer-entry')) {
+        const amountInput = payerEntry.querySelector('.amount-input');
+        const amount = parseAmountInput(amountInput);
+        if (amount === null || amount <= 0) {
+            const invalidInput = markEntryInvalid(payerEntry);
+            firstInvalidInput = firstInvalidInput || invalidInput;
+            continue;
         }
-        totalPaid += amount;
-        return {
+
+        totalPaidCents += await getConvertedCents(payerEntry, displayCurrency);
+        payers.push({
             person: payerEntry.querySelector('.payer-select').value,
             amount: amount,
             currency: payerEntry.querySelector('.currency-select').value
-        };
-    });
+        });
+    }
 
     // If any payer has invalid amount, stop the save process
-    if (payers.includes(null)) return;
+    if (firstInvalidInput) {
+        focusInvalidInput(firstInvalidInput);
+        showErrorToast('Please enter valid positive amounts for all payers.');
+        return;
+    }
 
     // Check splits and validate amounts
-    let totalSplit = 0;
-    const splits = Array.from(expenseEntry.querySelectorAll('.split-entry')).map(splitEntry => {
-        const amount = parseFloat(splitEntry.querySelector('.amount-input').value);
-        if (isNaN(amount) || amount <= 0) {
-            showErrorToast('Please enter valid positive amounts for all splits.');
-            return null;
+    let totalSplitCents = 0;
+    const splits = [];
+    for (const splitEntry of expenseEntry.querySelectorAll('.split-entry')) {
+        const amountInput = splitEntry.querySelector('.amount-input');
+        const amount = parseAmountInput(amountInput);
+        if (amount === null || amount <= 0) {
+            const invalidInput = markEntryInvalid(splitEntry);
+            firstInvalidInput = firstInvalidInput || invalidInput;
+            continue;
         }
-        totalSplit += amount;
-        return {
+
+        totalSplitCents += await getConvertedCents(splitEntry, displayCurrency);
+        splits.push({
             person: splitEntry.querySelector('.split-select').value,
             amount: amount,
             currency: splitEntry.querySelector('.currency-select').value
-        };
-    });
+        });
+    }
 
     // If any split has invalid amount, stop the save process
-    if (splits.includes(null)) return;
+    if (firstInvalidInput) {
+        focusInvalidInput(firstInvalidInput);
+        showErrorToast('Please enter valid positive amounts for all splits.');
+        return;
+    }
 
     // Check if amounts match
-    if (Math.abs(totalPaid - totalSplit) > 0.01) {
+    if (!amountsMatchInCents(totalPaidCents, totalSplitCents)) {
         showErrorToast('The total amount paid must equal the total amount split.');
         return;
     }
@@ -1085,17 +1140,20 @@ document.addEventListener('change', async event => {
     }
 });
 
+document.addEventListener('input', event => {
+    if (event.target.classList.contains('amount-input')) {
+        clearEntryValidation(event.target.closest('.payer-entry, .split-entry'));
+    }
+});
+
 async function splitEvenly(btn) {
     const expenseEntry = btn.closest('.expense-entry');
     const displayCurrency = expenseEntry.querySelector('.display-currency-select').value;
 
     // Calculate total paid amount in display currency
-    let totalPaid = 0;
+    let totalPaidCents = 0;
     for (const payerEntry of expenseEntry.querySelectorAll('.payer-entry')) {
-        const amount = parseFloat(payerEntry.querySelector('.amount-input').value) || 0;
-        const currency = payerEntry.querySelector('.currency-select').value;
-        const rate = await getExchangeRate(currency, displayCurrency);
-        totalPaid += amount * rate;
+        totalPaidCents += await getConvertedCents(payerEntry, displayCurrency);
     }
 
     // Get all split entries
@@ -1105,24 +1163,18 @@ async function splitEvenly(btn) {
         return;
     }
 
-    // Calculate exact even split amount
-    const exactEvenAmount = totalPaid / splitEntries.length;
-    const roundedEvenAmount = Math.floor(exactEvenAmount * 100) / 100; // Round down to 2 decimals
-
-    // Calculate total after rounding
-    const totalAfterRounding = roundedEvenAmount * (splitEntries.length - 1);
-
-    // Calculate the remaining amount for the first person
-    const firstPersonAmount = (totalPaid - totalAfterRounding).toFixed(2);
+    const baseSplitCents = Math.floor(totalPaidCents / splitEntries.length);
+    const remainderCents = totalPaidCents % splitEntries.length;
 
     // Update all split amounts
     splitEntries.forEach((splitEntry, index) => {
         const amountInput = splitEntry.querySelector('.amount-input');
         const currencySelect = splitEntry.querySelector('.currency-select');
+        const splitCents = baseSplitCents + (index < remainderCents ? 1 : 0);
 
-        // First person gets the adjusted amount, others get the rounded even amount
-        amountInput.value = index ===0 ? firstPersonAmount : roundedEvenAmount.toFixed(2);
+        amountInput.value = (splitCents / 100).toFixed(2);
         currencySelect.value = displayCurrency;
+        clearEntryValidation(splitEntry);
     });
 
     // Update totals
