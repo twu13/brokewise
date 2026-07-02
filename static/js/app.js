@@ -1,6 +1,7 @@
 let participants = [];
 let savedExpenses = [];
 let groupId = window.location.pathname.split('/g/').pop();
+const exchangeRateCache = new Map();
 
 document.addEventListener('DOMContentLoaded', () => {
     // Load initial data
@@ -45,17 +46,20 @@ function debounce(func, wait) {
     };
 }
 
-function saveToBackend() {
-    fetch(`/api/g/${groupId}`, {
-        method: 'POST',
+async function saveParticipantsToBackend() {
+    const response = await fetch(`/api/g/${groupId}/participants`, {
+        method: 'PATCH',
         headers: {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            participants,
-            expenses: savedExpenses
+            participants
         })
-    }).catch(error => console.error('Error saving expenses:', error));
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to save participants');
+    }
 }
 
 async function exportGroupData() {
@@ -318,7 +322,7 @@ function addParticipant() {
         input.value = '';
         updateParticipantList();
         updateAllParticipantSelects();
-        saveToBackend();
+        saveParticipantsToBackend().catch(error => console.error('Error saving participants:', error));
     }
 }
 
@@ -326,7 +330,7 @@ function removeParticipant(name) {
     participants = participants.filter(p => p !== name);
     updateParticipantList();
     updateAllParticipantSelects();
-    saveToBackend();
+    saveParticipantsToBackend().catch(error => console.error('Error saving participants:', error));
 }
 
 function updateParticipantList() {
@@ -403,9 +407,11 @@ function addPayer(btn) {
         .join('');
 
     if (select.options.length > 0) {
+        const amountInput = clone.querySelector('.amount-input');
         payersList.appendChild(clone);
         updateAllParticipantSelects();
         updateTotals(select);
+        amountInput.focus();
     } else {
         // More accurate message
         if (participants.length === 0) {
@@ -471,14 +477,112 @@ function removeExpense(btn) {
 }
 
 async function getExchangeRate(fromCurrency, toCurrency) {
-    try {
-        const response = await fetch(`/api/exchange-rate?from=${fromCurrency}&to=${toCurrency}`);
-        const data = await response.json();
-        return data.rate;
-    } catch (error) {
-        console.error('Error fetching exchange rate:', error);
+    if (fromCurrency === toCurrency) {
         return 1.0;
     }
+
+    const cacheKey = `${fromCurrency}:${toCurrency}`;
+    if (exchangeRateCache.has(cacheKey)) {
+        return exchangeRateCache.get(cacheKey);
+    }
+
+    const queryParams = new URLSearchParams({ from: fromCurrency, to: toCurrency });
+    const rateRequest = fetch(`/api/exchange-rate?${queryParams.toString()}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to fetch exchange rate');
+            }
+            return response.json();
+        })
+        .then(data => data.rate)
+        .catch(error => {
+            exchangeRateCache.delete(cacheKey);
+            console.error('Error fetching exchange rate:', error);
+            return 1.0;
+        });
+
+    exchangeRateCache.set(cacheKey, rateRequest);
+    return rateRequest;
+}
+
+async function saveExpenseToBackend(expense, expenseId = null) {
+    const url = expenseId
+        ? `/api/g/${groupId}/expenses/${expenseId}`
+        : `/api/g/${groupId}/expenses`;
+    const response = await fetch(url, {
+        method: expenseId ? 'PUT' : 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(expense)
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to save expense');
+    }
+
+    const data = await response.json();
+    return data.expense;
+}
+
+async function deleteExpenseFromBackend(id) {
+    const response = await fetch(`/api/g/${groupId}/expenses/${id}`, {
+        method: 'DELETE'
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to delete expense');
+    }
+}
+
+function parseAmountInput(input) {
+    const amount = parseFloat(input.value);
+    return Number.isFinite(amount) ? amount : null;
+}
+
+function amountToCents(amount) {
+    return Math.round(amount * 100);
+}
+
+async function getConvertedCents(entry, displayCurrency) {
+    const amountInput = entry.querySelector('.amount-input');
+    const amount = parseAmountInput(amountInput) || 0;
+    const currency = entry.querySelector('.currency-select').value;
+    const rate = await getExchangeRate(currency, displayCurrency);
+    return amountToCents(amount * rate);
+}
+
+function formatCents(cents) {
+    return (cents / 100).toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+}
+
+function amountsMatchInCents(totalPaidCents, totalSplitCents) {
+    return Math.abs(totalPaidCents - totalSplitCents) <= 1;
+}
+
+function clearEntryValidation(entry) {
+    if (!entry) return;
+
+    entry.classList.remove('invalid-entry');
+    const amountInput = entry.querySelector('.amount-input');
+    if (amountInput) {
+        amountInput.classList.remove('is-invalid');
+    }
+}
+
+function markEntryInvalid(entry) {
+    entry.classList.add('invalid-entry');
+    const amountInput = entry.querySelector('.amount-input');
+    amountInput.classList.add('is-invalid');
+    return amountInput;
+}
+
+function focusInvalidInput(input) {
+    input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    input.focus();
 }
 
 async function updateTotals(element) {
@@ -487,48 +591,34 @@ async function updateTotals(element) {
     saveBtn.disabled = true;
 
     const displayCurrency = expenseEntry.querySelector('.display-currency-select').value;
-    let totalPaid = 0;
-    let totalSplit = 0;
+    let totalPaidCents = 0;
+    let totalSplitCents = 0;
 
     for (const payerEntry of expenseEntry.querySelectorAll('.payer-entry')) {
-        const amount = parseFloat(payerEntry.querySelector('.amount-input').value) || 0;
-        const currency = payerEntry.querySelector('.currency-select').value;
-        const rate = await getExchangeRate(currency, displayCurrency);
-        totalPaid += amount * rate;
+        totalPaidCents += await getConvertedCents(payerEntry, displayCurrency);
     }
 
     for (const splitEntry of expenseEntry.querySelectorAll('.split-entry')) {
-        const amount = parseFloat(splitEntry.querySelector('.amount-input').value) || 0;
-        const currency = splitEntry.querySelector('.currency-select').value;
-        const rate = await getExchangeRate(currency, displayCurrency);
-        totalSplit += amount * rate;
+        totalSplitCents += await getConvertedCents(splitEntry, displayCurrency);
     }
 
-    // Format amounts with commas and always 2 decimal places
-    const formattedTotalPaid = totalPaid.toLocaleString('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    });
-    const formattedTotalSplit = totalSplit.toLocaleString('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    });
-    
     expenseEntry.querySelector('.total-paid').textContent =
-        `${displayCurrency} ${formattedTotalPaid}`;
+        `${displayCurrency} ${formatCents(totalPaidCents)}`;
     expenseEntry.querySelector('.total-split').textContent =
-        `${displayCurrency} ${formattedTotalSplit}`;
+        `${displayCurrency} ${formatCents(totalSplitCents)}`;
 
     const warning = expenseEntry.querySelector('.amounts-mismatch-warning');
-    const amountsMatch = Math.abs(totalPaid - totalSplit) <= 0.01;
+    const amountsMatch = amountsMatchInCents(totalPaidCents, totalSplitCents);
     warning.style.display = amountsMatch ? 'none' : 'block';
     saveBtn.disabled = !amountsMatch;
 }
 
-function saveExpense(btn) {
+async function saveExpense(btn) {
     const expenseEntry = btn.closest('.expense-entry');
     const description = expenseEntry.querySelector('input[type="text"]').value;
     const displayCurrency = expenseEntry.querySelector('.display-currency-select').value;
+    const invalidEntries = expenseEntry.querySelectorAll('.invalid-entry');
+    invalidEntries.forEach(clearEntryValidation);
 
     // Validate description
     if (!description.trim()) {
@@ -537,63 +627,94 @@ function saveExpense(btn) {
     }
 
     // Calculate total amounts and validate payers
-    let totalPaid = 0;
-    const payers = Array.from(expenseEntry.querySelectorAll('.payer-entry')).map(payerEntry => {
-        const amount = parseFloat(payerEntry.querySelector('.amount-input').value);
-        if (isNaN(amount) || amount <= 0) {
-            showErrorToast('Please enter valid positive amounts for all payers.');
-            return null;
+    let totalPaidCents = 0;
+    let firstInvalidInput = null;
+    const payers = [];
+    for (const payerEntry of expenseEntry.querySelectorAll('.payer-entry')) {
+        const amountInput = payerEntry.querySelector('.amount-input');
+        const amount = parseAmountInput(amountInput);
+        if (amount === null || amount <= 0) {
+            const invalidInput = markEntryInvalid(payerEntry);
+            firstInvalidInput = firstInvalidInput || invalidInput;
+            continue;
         }
-        totalPaid += amount;
-        return {
+
+        totalPaidCents += await getConvertedCents(payerEntry, displayCurrency);
+        payers.push({
             person: payerEntry.querySelector('.payer-select').value,
             amount: amount,
             currency: payerEntry.querySelector('.currency-select').value
-        };
-    });
+        });
+    }
 
     // If any payer has invalid amount, stop the save process
-    if (payers.includes(null)) return;
+    if (firstInvalidInput) {
+        focusInvalidInput(firstInvalidInput);
+        showErrorToast('Please enter valid positive amounts for all payers.');
+        return;
+    }
 
     // Check splits and validate amounts
-    let totalSplit = 0;
-    const splits = Array.from(expenseEntry.querySelectorAll('.split-entry')).map(splitEntry => {
-        const amount = parseFloat(splitEntry.querySelector('.amount-input').value);
-        if (isNaN(amount) || amount <= 0) {
-            showErrorToast('Please enter valid positive amounts for all splits.');
-            return null;
+    let totalSplitCents = 0;
+    const splits = [];
+    for (const splitEntry of expenseEntry.querySelectorAll('.split-entry')) {
+        const amountInput = splitEntry.querySelector('.amount-input');
+        const amount = parseAmountInput(amountInput);
+        if (amount === null || amount <= 0) {
+            const invalidInput = markEntryInvalid(splitEntry);
+            firstInvalidInput = firstInvalidInput || invalidInput;
+            continue;
         }
-        totalSplit += amount;
-        return {
+
+        totalSplitCents += await getConvertedCents(splitEntry, displayCurrency);
+        splits.push({
             person: splitEntry.querySelector('.split-select').value,
             amount: amount,
             currency: splitEntry.querySelector('.currency-select').value
-        };
-    });
+        });
+    }
 
     // If any split has invalid amount, stop the save process
-    if (splits.includes(null)) return;
+    if (firstInvalidInput) {
+        focusInvalidInput(firstInvalidInput);
+        showErrorToast('Please enter valid positive amounts for all splits.');
+        return;
+    }
 
     // Check if amounts match
-    if (Math.abs(totalPaid - totalSplit) > 0.01) {
+    if (!amountsMatchInCents(totalPaidCents, totalSplitCents)) {
         showErrorToast('The total amount paid must equal the total amount split.');
         return;
     }
 
     const expense = {
-        id: Date.now(),
         description,
         displayCurrency,
         payers,
-        splits,
-        date: new Date().toISOString()
+        splits
     };
 
-    savedExpenses.push(expense);
-    saveToBackend();
-    updateExpenseTable();
-    expenseEntry.remove();
-    showSuccessToast('Expense saved successfully!');
+    const expenseId = expenseEntry.dataset.expenseId || null;
+    btn.disabled = true;
+    try {
+        const savedExpense = await saveExpenseToBackend(expense, expenseId);
+        if (expenseId) {
+            const existingIndex = savedExpenses.findIndex(e => e.id === savedExpense.id);
+            if (existingIndex !== -1) {
+                savedExpenses[existingIndex] = savedExpense;
+            }
+        } else {
+            savedExpenses.push(savedExpense);
+        }
+
+        await updateExpenseTable();
+        expenseEntry.remove();
+        showSuccessToast(expenseId ? 'Expense updated successfully!' : 'Expense saved successfully!');
+    } catch (error) {
+        console.error('Error saving expense:', error);
+        showErrorToast('Error saving expense. Please try again.');
+        btn.disabled = false;
+    }
 }
 
 
@@ -635,11 +756,16 @@ function showSuccessToast(message) {
     toast.show();
 }
 
-function deleteExpense(id) {
+async function deleteExpense(id) {
     if (confirm('Are you sure you want to delete this expense?')) {
-        savedExpenses = savedExpenses.filter(e => e.id !== id);
-        saveToBackend();
-        updateExpenseTable();
+        try {
+            await deleteExpenseFromBackend(id);
+            savedExpenses = savedExpenses.filter(e => e.id !== id);
+            await updateExpenseTable();
+        } catch (error) {
+            console.error('Error deleting expense:', error);
+            showErrorToast('Error deleting expense. Please try again.');
+        }
     }
 }
 
@@ -794,6 +920,7 @@ function editExpense(id) {
     // Add a new expense form
     addExpenseRow();
     const expenseEntry = document.querySelector('.expense-entry:last-child');
+    expenseEntry.dataset.expenseId = expense.id;
 
     // Fill in the description
     expenseEntry.querySelector('.expense-description').value = expense.description;
@@ -833,9 +960,8 @@ function editExpense(id) {
         splitsList.appendChild(clone);
     });
 
-    // Delete the old expense
-    savedExpenses = savedExpenses.filter(e => e.id !== id);
-    saveToBackend();
+    const saveBtn = expenseEntry.querySelector('.btn-success');
+    saveBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Update';
 
     // Update totals
     updateTotals(expenseEntry.querySelector('.display-currency-select'));
@@ -1085,17 +1211,20 @@ document.addEventListener('change', async event => {
     }
 });
 
+document.addEventListener('input', event => {
+    if (event.target.classList.contains('amount-input')) {
+        clearEntryValidation(event.target.closest('.payer-entry, .split-entry'));
+    }
+});
+
 async function splitEvenly(btn) {
     const expenseEntry = btn.closest('.expense-entry');
     const displayCurrency = expenseEntry.querySelector('.display-currency-select').value;
 
     // Calculate total paid amount in display currency
-    let totalPaid = 0;
+    let totalPaidCents = 0;
     for (const payerEntry of expenseEntry.querySelectorAll('.payer-entry')) {
-        const amount = parseFloat(payerEntry.querySelector('.amount-input').value) || 0;
-        const currency = payerEntry.querySelector('.currency-select').value;
-        const rate = await getExchangeRate(currency, displayCurrency);
-        totalPaid += amount * rate;
+        totalPaidCents += await getConvertedCents(payerEntry, displayCurrency);
     }
 
     // Get all split entries
@@ -1105,24 +1234,18 @@ async function splitEvenly(btn) {
         return;
     }
 
-    // Calculate exact even split amount
-    const exactEvenAmount = totalPaid / splitEntries.length;
-    const roundedEvenAmount = Math.floor(exactEvenAmount * 100) / 100; // Round down to 2 decimals
-
-    // Calculate total after rounding
-    const totalAfterRounding = roundedEvenAmount * (splitEntries.length - 1);
-
-    // Calculate the remaining amount for the first person
-    const firstPersonAmount = (totalPaid - totalAfterRounding).toFixed(2);
+    const baseSplitCents = Math.floor(totalPaidCents / splitEntries.length);
+    const remainderCents = totalPaidCents % splitEntries.length;
 
     // Update all split amounts
     splitEntries.forEach((splitEntry, index) => {
         const amountInput = splitEntry.querySelector('.amount-input');
         const currencySelect = splitEntry.querySelector('.currency-select');
+        const splitCents = baseSplitCents + (index < remainderCents ? 1 : 0);
 
-        // First person gets the adjusted amount, others get the rounded even amount
-        amountInput.value = index ===0 ? firstPersonAmount : roundedEvenAmount.toFixed(2);
+        amountInput.value = (splitCents / 100).toFixed(2);
         currencySelect.value = displayCurrency;
+        clearEntryValidation(splitEntry);
     });
 
     // Update totals
