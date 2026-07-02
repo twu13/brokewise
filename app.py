@@ -10,7 +10,7 @@ from flask_sqlalchemy import SQLAlchemy
 from nanoid import generate
 from sqlalchemy import select
 from sqlalchemy.orm import DeclarativeBase, selectinload
-from werkzeug.exceptions import HTTPException
+from werkzeug.exceptions import BadRequest, HTTPException
 
 load_dotenv()
 
@@ -115,14 +115,68 @@ def serialize_expense(expense):
     }
 
 
+def validate_expense_payload(exp_data):
+    if not isinstance(exp_data, dict):
+        raise BadRequest("Expense payload must be a JSON object.")
+
+    description = exp_data.get("description")
+    if not isinstance(description, str) or not description.strip():
+        raise BadRequest("Expense description is required.")
+
+    display_currency = exp_data.get("displayCurrency")
+    if not isinstance(display_currency, str) or not display_currency.strip():
+        raise BadRequest("Expense displayCurrency is required.")
+
+    return {
+        "description": description.strip(),
+        "displayCurrency": display_currency.strip().upper(),
+        "payers": validate_expense_entries(exp_data.get("payers"), "payers"),
+        "splits": validate_expense_entries(exp_data.get("splits"), "splits"),
+    }
+
+
+def validate_expense_entries(entries, field_name):
+    if not isinstance(entries, list) or not entries:
+        raise BadRequest(f"Expense {field_name} must be a non-empty list.")
+
+    validated_entries = []
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise BadRequest(f"Expense {field_name}[{index}] must be a JSON object.")
+
+        person = entry.get("person")
+        if not isinstance(person, str) or not person.strip():
+            raise BadRequest(f"Expense {field_name}[{index}].person is required.")
+
+        try:
+            amount = float(entry["amount"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise BadRequest(f"Expense {field_name}[{index}].amount must be numeric.") from exc
+
+        currency = entry.get("currency")
+        if not isinstance(currency, str) or not currency.strip():
+            raise BadRequest(f"Expense {field_name}[{index}].currency is required.")
+
+        validated_entries.append(
+            {
+                "person": person.strip(),
+                "amount": amount,
+                "currency": currency.strip().upper(),
+            }
+        )
+
+    return validated_entries
+
+
 def update_expense_from_payload(expense, exp_data):
     from models import ExpensePayer, ExpenseSplit
 
-    expense.description = exp_data["description"]
-    expense.display_currency = exp_data["displayCurrency"]
+    validated_expense = validate_expense_payload(exp_data)
+    expense.description = validated_expense["description"]
+    expense.display_currency = validated_expense["displayCurrency"]
 
     expense.payers.clear()
-    for payer in exp_data["payers"]:
+    for payer in validated_expense["payers"]:
         expense.payers.append(
             ExpensePayer(
                 person=payer["person"],
@@ -132,7 +186,7 @@ def update_expense_from_payload(expense, exp_data):
         )
 
     expense.splits.clear()
-    for split in exp_data["splits"]:
+    for split in validated_expense["splits"]:
         expense.splits.append(
             ExpenseSplit(
                 person=split["person"],

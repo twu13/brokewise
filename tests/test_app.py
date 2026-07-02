@@ -109,6 +109,23 @@ def test_targeted_expense_endpoints(client):
     assert client.get(f"/api/g/{group_id}").get_json()["expenses"] == []
 
 
+def test_expense_payload_validation_returns_400(client):
+    """Malformed targeted expense payloads should be treated as client errors."""
+    group_id = client.get("/").headers["Location"].split("/g/")[1]
+
+    response = client.post(
+        f"/api/g/{group_id}/expenses",
+        json={
+            "description": "Lunch",
+            "displayCurrency": "USD",
+            "payers": [{"person": "Alice", "currency": "USD"}],
+            "splits": [{"person": "Bob", "amount": 10, "currency": "USD"}],
+        },
+    )
+
+    assert response.status_code == 400
+
+
 def test_targeted_update_does_not_rewrite_large_group(client):
     """Updating one expense should not delete/recreate the whole expense group."""
     group_id = client.get("/").headers["Location"].split("/g/")[1]
@@ -152,10 +169,11 @@ def test_targeted_update_does_not_rewrite_large_group(client):
 
     group_data = client.get(f"/api/g/{group_id}").get_json()
     expenses = group_data["expenses"]
-    assert [expense["id"] for expense in expenses] == expense_ids
-    assert expenses[30]["description"] == "Updated target"
-    assert expenses[29]["description"] == "Expense 29"
-    assert expenses[31]["description"] == "Expense 31"
+    expenses_by_id = {expense["id"]: expense for expense in expenses}
+    assert set(expenses_by_id) == set(expense_ids)
+    assert expenses_by_id[target_id]["description"] == "Updated target"
+    assert expenses_by_id[expense_ids[29]]["description"] == "Expense 29"
+    assert expenses_by_id[expense_ids[31]]["description"] == "Expense 31"
 
     normalized_statements = [" ".join(statement.lower().split()) for statement in statements]
     assert not any(

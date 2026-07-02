@@ -486,7 +486,8 @@ async function getExchangeRate(fromCurrency, toCurrency) {
         return exchangeRateCache.get(cacheKey);
     }
 
-    const rateRequest = fetch(`/api/exchange-rate?from=${fromCurrency}&to=${toCurrency}`)
+    const queryParams = new URLSearchParams({ from: fromCurrency, to: toCurrency });
+    const rateRequest = fetch(`/api/exchange-rate?${queryParams.toString()}`)
         .then(response => {
             if (!response.ok) {
                 throw new Error('Failed to fetch exchange rate');
