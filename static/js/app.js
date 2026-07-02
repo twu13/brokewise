@@ -1,6 +1,7 @@
 let participants = [];
 let savedExpenses = [];
 let groupId = window.location.pathname.split('/g/').pop();
+const exchangeRateCache = new Map();
 
 document.addEventListener('DOMContentLoaded', () => {
     // Load initial data
@@ -45,17 +46,20 @@ function debounce(func, wait) {
     };
 }
 
-function saveToBackend() {
-    fetch(`/api/g/${groupId}`, {
-        method: 'POST',
+async function saveParticipantsToBackend() {
+    const response = await fetch(`/api/g/${groupId}/participants`, {
+        method: 'PATCH',
         headers: {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            participants,
-            expenses: savedExpenses
+            participants
         })
-    }).catch(error => console.error('Error saving expenses:', error));
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to save participants');
+    }
 }
 
 async function exportGroupData() {
@@ -318,7 +322,7 @@ function addParticipant() {
         input.value = '';
         updateParticipantList();
         updateAllParticipantSelects();
-        saveToBackend();
+        saveParticipantsToBackend().catch(error => console.error('Error saving participants:', error));
     }
 }
 
@@ -326,7 +330,7 @@ function removeParticipant(name) {
     participants = participants.filter(p => p !== name);
     updateParticipantList();
     updateAllParticipantSelects();
-    saveToBackend();
+    saveParticipantsToBackend().catch(error => console.error('Error saving participants:', error));
 }
 
 function updateParticipantList() {
@@ -473,13 +477,60 @@ function removeExpense(btn) {
 }
 
 async function getExchangeRate(fromCurrency, toCurrency) {
-    try {
-        const response = await fetch(`/api/exchange-rate?from=${fromCurrency}&to=${toCurrency}`);
-        const data = await response.json();
-        return data.rate;
-    } catch (error) {
-        console.error('Error fetching exchange rate:', error);
+    if (fromCurrency === toCurrency) {
         return 1.0;
+    }
+
+    const cacheKey = `${fromCurrency}:${toCurrency}`;
+    if (exchangeRateCache.has(cacheKey)) {
+        return exchangeRateCache.get(cacheKey);
+    }
+
+    const rateRequest = fetch(`/api/exchange-rate?from=${fromCurrency}&to=${toCurrency}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to fetch exchange rate');
+            }
+            return response.json();
+        })
+        .then(data => data.rate)
+        .catch(error => {
+            exchangeRateCache.delete(cacheKey);
+            console.error('Error fetching exchange rate:', error);
+            return 1.0;
+        });
+
+    exchangeRateCache.set(cacheKey, rateRequest);
+    return rateRequest;
+}
+
+async function saveExpenseToBackend(expense, expenseId = null) {
+    const url = expenseId
+        ? `/api/g/${groupId}/expenses/${expenseId}`
+        : `/api/g/${groupId}/expenses`;
+    const response = await fetch(url, {
+        method: expenseId ? 'PUT' : 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(expense)
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to save expense');
+    }
+
+    const data = await response.json();
+    return data.expense;
+}
+
+async function deleteExpenseFromBackend(id) {
+    const response = await fetch(`/api/g/${groupId}/expenses/${id}`, {
+        method: 'DELETE'
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to delete expense');
     }
 }
 
@@ -636,19 +687,33 @@ async function saveExpense(btn) {
     }
 
     const expense = {
-        id: Date.now(),
         description,
         displayCurrency,
         payers,
-        splits,
-        date: new Date().toISOString()
+        splits
     };
 
-    savedExpenses.push(expense);
-    saveToBackend();
-    updateExpenseTable();
-    expenseEntry.remove();
-    showSuccessToast('Expense saved successfully!');
+    const expenseId = expenseEntry.dataset.expenseId || null;
+    btn.disabled = true;
+    try {
+        const savedExpense = await saveExpenseToBackend(expense, expenseId);
+        if (expenseId) {
+            const existingIndex = savedExpenses.findIndex(e => e.id === savedExpense.id);
+            if (existingIndex !== -1) {
+                savedExpenses[existingIndex] = savedExpense;
+            }
+        } else {
+            savedExpenses.push(savedExpense);
+        }
+
+        await updateExpenseTable();
+        expenseEntry.remove();
+        showSuccessToast(expenseId ? 'Expense updated successfully!' : 'Expense saved successfully!');
+    } catch (error) {
+        console.error('Error saving expense:', error);
+        showErrorToast('Error saving expense. Please try again.');
+        btn.disabled = false;
+    }
 }
 
 
@@ -690,11 +755,16 @@ function showSuccessToast(message) {
     toast.show();
 }
 
-function deleteExpense(id) {
+async function deleteExpense(id) {
     if (confirm('Are you sure you want to delete this expense?')) {
-        savedExpenses = savedExpenses.filter(e => e.id !== id);
-        saveToBackend();
-        updateExpenseTable();
+        try {
+            await deleteExpenseFromBackend(id);
+            savedExpenses = savedExpenses.filter(e => e.id !== id);
+            await updateExpenseTable();
+        } catch (error) {
+            console.error('Error deleting expense:', error);
+            showErrorToast('Error deleting expense. Please try again.');
+        }
     }
 }
 
@@ -849,6 +919,7 @@ function editExpense(id) {
     // Add a new expense form
     addExpenseRow();
     const expenseEntry = document.querySelector('.expense-entry:last-child');
+    expenseEntry.dataset.expenseId = expense.id;
 
     // Fill in the description
     expenseEntry.querySelector('.expense-description').value = expense.description;
@@ -888,9 +959,8 @@ function editExpense(id) {
         splitsList.appendChild(clone);
     });
 
-    // Delete the old expense
-    savedExpenses = savedExpenses.filter(e => e.id !== id);
-    saveToBackend();
+    const saveBtn = expenseEntry.querySelector('.btn-success');
+    saveBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Update';
 
     // Update totals
     updateTotals(expenseEntry.querySelector('.display-currency-select'));
