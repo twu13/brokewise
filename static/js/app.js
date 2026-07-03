@@ -311,7 +311,17 @@ function cancelPersonAdd() {
     renderPeople();
 }
 
+function personHasExpenses(name) {
+    return savedExpenses.some(e =>
+        e.payers.some(p => p.person === name) ||
+        e.splits.some(s => s.person === name));
+}
+
 function removeParticipant(name) {
+    if (personHasExpenses(name)) {
+        showErrorToast(`${name} is part of an expense — delete that expense first.`);
+        return;
+    }
     participants = participants.filter(p => p !== name);
     saveParticipantsToBackend().catch(error => {
         console.error('Error saving participants:', error);
@@ -380,14 +390,17 @@ function showErrorToast(message) {
         container = document.createElement('div');
         container.className = 'toast-container-ledger';
         container.setAttribute('aria-live', 'polite');
-        document.body.appendChild(container);
+        (document.querySelector('main.page-main') || document.body).appendChild(container);
     }
     const toast = document.createElement('div');
     toast.className = 'toast-ledger';
     toast.setAttribute('role', 'alert');
     toast.innerHTML = `<i class="bi bi-exclamation-circle"></i>${escapeHtml(message)}`;
     container.appendChild(toast);
-    setTimeout(() => toast.remove(), 3500);
+    setTimeout(() => {
+        toast.remove();
+        if (container.children.length === 0) container.remove();
+    }, 3500);
 }
 
 // ===== Backend calls =====

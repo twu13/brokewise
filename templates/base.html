@@ -26,8 +26,13 @@
             <a class="brand" href="/">
                 <span class="logo-container">
                     <i class="bi bi-wallet2 wallet-icon"></i>
+                    <i class="bi bi-currency-dollar money-icon"></i>
+                    <i class="bi bi-currency-euro money-icon"></i>
                 </span>
-                <span class="wordmark">brokewise</span>
+                <span class="brand-text">
+                    <span class="wordmark">brokewise</span>
+                    <span class="tagline">pay up</span>
+                </span>
             </a>
             <div class="header-actions">
                 <div class="share-pill">
@@ -35,11 +40,15 @@
                     <span class="share-pill__url" id="shareUrlText">{{ request.url }}</span>
                     <button type="button" class="copy-btn" id="copyLinkBtn" data-action="copy-link" aria-label="Copy group link">Copy</button>
                 </div>
+                <a class="icon-btn" id="newGroupBtn" href="/" title="New sheet — start a fresh group" aria-label="New sheet — start a fresh group">
+                    <i class="bi bi-file-earmark-plus"></i>
+                </a>
                 <button type="button" class="icon-btn" id="themeToggle" data-action="toggle-theme" title="Toggle theme" aria-label="Toggle theme">
                     <i class="bi bi-moon" id="themeToggleIcon"></i>
                 </button>
             </div>
         </div>
+        <div class="container-ledger header-note">This link saves your group automatically (deleted after 90 days of inactivity).</div>
     </header>
 
     <main class="container-ledger page-main">
