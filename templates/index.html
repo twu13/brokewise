@@ -1,277 +1,173 @@
 {% extends "base.html" %}
 
 {% block content %}
-<!-- Add a Share URL section at the top -->
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="alert alert-info d-flex align-items-center">
-            <i class="bi bi-link-45deg me-2 fs-4"></i>
-            <div class="flex-grow-1">
-                Share this URL with your group to collaborate on expenses:
-                <div class="input-group mt-2">
-                    <input type="text" class="form-control" value="{{ request.url }}" readonly id="shareUrl" onclick="this.select();">
-                </div>
-            </div>
-        </div>
-        <p class="text-muted small mt-1"><i class="bi bi-info-circle me-1"></i>Inactive expense groups may be removed after 90 days.</p>
+<!-- People -->
+<div class="section">
+    <div class="micro-label">People</div>
+    <div class="people-row" id="peopleRow">
+        <!-- Chips rendered by JS; the add affordance below is moved to the end on each render -->
+        <input type="text" class="chip-input" id="personInput" placeholder="Name" autocomplete="off" hidden>
+        <button type="button" class="chip--add" id="addPersonChip" data-action="start-add-person">
+            <i class="bi bi-plus"></i>Add person
+        </button>
     </div>
 </div>
 
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="card shadow-sm">
-            <div class="card-header bg-light">
-                <h4 class="mb-0"><i class="bi bi-people me-2"></i>Participant Setup</h4>
+<!-- Tabs (desktop) -->
+<div class="tabs-ledger" id="desktopTabs" role="tablist">
+    <button type="button" class="tab-ledger active" role="tab" aria-selected="true" data-action="switch-tab" data-tab="add">
+        <span id="tabAddLabel">Add</span>
+    </button>
+    <button type="button" class="tab-ledger" role="tab" aria-selected="false" data-action="switch-tab" data-tab="view">
+        Expenses&nbsp;<span class="tab-count" id="expenseCountBadge" hidden></span>
+    </button>
+    <button type="button" class="tab-ledger" role="tab" aria-selected="false" data-action="switch-tab" data-tab="settle">
+        Settle up
+    </button>
+</div>
+
+<!-- Add / Edit expense -->
+<div class="tab-pane" id="pane-add">
+    <div class="card-ledger--empty" id="addEmptyState" hidden>
+        <i class="bi bi-people empty-icon"></i>
+        <div class="empty-title">Add people first</div>
+        <div class="empty-body">Expenses need someone to pay and someone to split with. Add the people in your group above to get started.</div>
+        <button type="button" class="btn-ledger" data-action="start-add-person"><i class="bi bi-plus"></i>Add a person</button>
+    </div>
+
+    <div class="card-ledger expense-form" id="expenseForm">
+        <input type="text" class="input-title" id="expenseDescription" placeholder="What was this expense for?" autocomplete="off">
+
+        <div class="form-grid">
+            <div class="form-col">
+                <div class="micro-label">Paid by</div>
+                <div class="entry-rows" id="payersList"></div>
+                <button type="button" class="btn-link-accent" data-action="add-payer"><i class="bi bi-plus"></i> Add payer</button>
             </div>
-            <div class="card-body">
-                <div class="mb-3">
-                    <label for="participantInput" class="form-label">Enter participant name</label>
-                    <input type="text" class="form-control mb-2" id="participantInput" placeholder="Enter participant name">
-                    <button class="btn btn-primary" onclick="addParticipant()">Add</button>
+            <div class="form-col">
+                <div class="col-head">
+                    <div class="micro-label">Split between</div>
+                    <button type="button" class="btn-link-accent" data-action="split-evenly">Split evenly</button>
                 </div>
-                <div id="participantList" class="mb-3"></div>
+                <div class="entry-rows" id="splitsList"></div>
+                <button type="button" class="btn-link-accent" data-action="add-split"><i class="bi bi-plus"></i> Add split</button>
             </div>
+        </div>
+
+        <div class="form-footer">
+            <span class="totals-indicator" id="totalsIndicator" aria-live="polite">
+                <i class="bi bi-circle" id="totalsIcon"></i><span id="totalsText">Enter amounts</span>
+            </span>
+            <div class="form-actions">
+                <button type="button" class="btn-link-muted" id="cancelEditBtn" data-action="cancel-edit" hidden>Cancel</button>
+                <button type="button" class="btn-ledger" id="saveExpenseBtn" data-action="save-expense">Save expense</button>
+            </div>
+        </div>
+    </div>
+    <div class="helper-text" id="addHelperText"><i class="bi bi-info-circle"></i>Amounts can be in any currency — they're converted automatically. Inactive groups may be removed after 90 days.</div>
+</div>
+
+<!-- Expenses -->
+<div class="tab-pane" id="pane-view" hidden>
+    <div class="card-ledger--empty" id="viewEmptyState" hidden>
+        <i class="bi bi-receipt empty-icon"></i>
+        <div class="empty-title">No expenses yet</div>
+        <div class="empty-body">Every expense you add shows up here with who paid and how it's split.</div>
+        <button type="button" class="btn-ledger" data-action="switch-tab" data-tab="add"><i class="bi bi-plus"></i>Add your first expense</button>
+    </div>
+
+    <div class="card-ledger expense-table-card only-desktop" id="expenseTableWrap">
+        <table class="expense-table">
+            <thead>
+                <tr>
+                    <th>Expense</th>
+                    <th>Paid by</th>
+                    <th>Split between</th>
+                    <th class="cell-amount">Amount</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="expenseTableBody"></tbody>
+        </table>
+        <div class="table-footer">
+            <span class="foot-count" id="expenseCountFooter"></span>
+            <span class="foot-total">Total <span id="grandTotal"></span></span>
+        </div>
+    </div>
+
+    <div class="only-mobile" id="expenseCardsWrap">
+        <div class="expense-cards" id="expenseCards"></div>
+        <div class="list-footer-m">
+            <span class="foot-count" id="expenseCountFooterMobile"></span>
+            <span class="foot-total">Total <span id="grandTotalMobile"></span></span>
         </div>
     </div>
 </div>
 
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="expense-tabs-container mb-3">
-            <ul class="nav nav-tabs tab-list-mobile" role="tablist">
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="add-expenses-tab" data-bs-toggle="tab" data-bs-target="#add-expenses" type="button" role="tab">
-                        <i class="bi bi-plus-lg me-2"></i><span class="d-none d-md-inline">Add Expenses</span><span class="d-inline d-md-none">Add</span>
-                    </button>
-                </li><li class="nav-item" role="presentation">
-                    <button class="nav-link" id="view-expenses-tab" data-bs-toggle="tab" data-bs-target="#view-expenses" type="button" role="tab">
-                        <i class="bi bi-table me-2"></i><span class="d-none d-md-inline">View Expenses</span><span class="d-inline d-md-none">View</span>
-                    </button>
-                </li><li class="nav-item" role="presentation">
-                    <button class="nav-link" id="settle-expenses-tab" data-bs-toggle="tab" data-bs-target="#settle-expenses" type="button" role="tab">
-                        <i class="bi bi-calculator me-2"></i><span class="d-none d-md-inline">Settle Expenses</span><span class="d-inline d-md-none">Settle</span>
-                    </button>
-                </li>
-            </ul>
-        </div>
+<!-- Settle up -->
+<div class="tab-pane" id="pane-settle" hidden>
+    <div class="card-ledger--empty" id="settleEmptyState" hidden>
+        <i class="bi bi-calculator empty-icon"></i>
+        <div class="empty-title">Nothing to settle yet</div>
+        <div class="empty-body">Once you've added expenses, we'll work out who owes what and the fewest transfers to square up.</div>
+        <button type="button" class="btn-ledger" data-action="switch-tab" data-tab="add"><i class="bi bi-plus"></i>Add an expense</button>
+    </div>
 
-        <div class="tab-content">
-            <!-- Add Expenses Tab -->
-            <div class="tab-pane fade show active" id="add-expenses" role="tabpanel">
-                <button class="btn btn-primary mb-3" onclick="addExpenseRow()">
-                    <i class="bi bi-plus-lg me-2"></i>Add Expense
+    <div class="settle-controls" id="settleControls">
+        <div class="settle-currency">
+            <label class="micro-label" for="baseCurrency">Settle in</label>
+            <select class="select-ledger" id="baseCurrency"></select>
+        </div>
+        <button type="button" class="btn-ledger" id="calculateBtn" data-action="calculate">Calculate settlement</button>
+    </div>
+
+    <div class="settle-hint" id="settleHint">
+        <i class="bi bi-arrow-up"></i>Pick a currency and calculate to see balances and the simplest transfers.
+    </div>
+
+    <div id="settlementResults" hidden>
+        <div class="settle-results">
+            <div class="balances-grid" id="balancesGrid"></div>
+            <div class="transfers-card" id="transfersCard">
+                <div class="transfers-head">
+                    <div class="micro-label">Simplest way to settle</div>
+                    <span class="tap-hint">tap to mark paid</span>
+                </div>
+                <div class="transfers-list" id="transfersList"></div>
+                <div class="all-paid-banner" id="allPaidBanner" hidden>
+                    <i class="bi bi-check-circle-fill"></i>Everyone's square. Nice trip!
+                </div>
+            </div>
+            <div class="settle-footer">
+                <span class="rates-note" id="exchangeRateInfo"></span>
+                <button type="button" class="btn-ledger btn-ledger--secondary btn-ledger--compact" data-action="export-pdf">
+                    <i class="bi bi-file-earmark-arrow-down"></i>Export PDF
                 </button>
-                <div id="expenseList" class="row g-3">
-                    <!-- Expenses will be dynamically added here -->
-                </div>
-            </div>
-
-            <!-- View Expenses Tab -->
-            <div class="tab-pane fade" id="view-expenses" role="tabpanel">
-                <!-- Desktop Table View -->
-                <div id="expenseTableContainer" class="card shadow-sm">
-                    <div class="card-header bg-light">
-                        <h4 class="mb-0"><i class="bi bi-table me-2"></i>Expenses</h4>
-                    </div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-hover">
-                                <thead>
-                                    <tr>
-                                        <th>Description</th>
-                                        <th>Who Paid</th>
-                                        <th>Amount Paid</th>
-                                        <th>Currency</th>
-                                        <th>Split Between</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="expenseTableBody">
-                                    <!-- Expense rows will be dynamically added here -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Mobile Card View -->
-                <div id="expenseMobileContainer" class="d-none">
-                    <div id="expenseMobileCards">
-                        <!-- Mobile expense cards will be dynamically added here -->
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Settle Expenses Tab -->
-            <div class="tab-pane fade" id="settle-expenses" role="tabpanel">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-light">
-                        <h4 class="mb-0"><i class="bi bi-calculator me-2"></i>Final Settlement</h4>
-                    </div>
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <label for="baseCurrency" class="form-label">Base Currency for Settlement</label>
-                            <select class="form-select" id="baseCurrency" style="max-width: 200px;">
-                                <option value="USD">USD - US Dollar</option>
-                                <option value="EUR">EUR - Euro</option>
-                                <option value="JPY">JPY - Japanese Yen</option>
-                                <option value="GBP">GBP - British Pound</option>
-                                <option value="CNY">CNY - Chinese Yuan</option>
-                                <option value="AUD">AUD - Australian Dollar</option>
-                                <option value="CAD">CAD - Canadian Dollar</option>
-                                <option value="CHF">CHF - Swiss Franc</option>
-                                <option value="HKD">HKD - Hong Kong Dollar</option>
-                                <option value="SGD">SGD - Singapore Dollar</option>
-                                <option value="SEK">SEK - Swedish Krona</option>
-                                <option value="KRW">KRW - South Korean Won</option>
-                                <option value="INR">INR - Indian Rupee</option>
-                                <option value="BRL">BRL - Brazilian Real</option>
-                                <option value="RUB">RUB - Russian Ruble</option>
-                                <option value="ZAR">ZAR - South African Rand</option>
-                                <option value="MXN">MXN - Mexican Peso</option>
-                                <option value="IDR">IDR - Indonesian Rupiah</option>
-                                <option value="TRY">TRY - Turkish Lira</option>
-                                <option value="SAR">SAR - Saudi Riyal</option>
-                            </select>
-                        </div>
-                        <div id="exchangeRateInfo" class="text-muted small mb-3">
-                            <!-- Exchange rate info will be displayed here -->
-                        </div>
-                        <button class="btn btn-primary" onclick="calculateSettlement()">
-                            <i class="bi bi-arrow-repeat me-2"></i>Calculate Settlement
-                        </button>
-                        <div id="settlementResults" class="mt-3"></div>
-
-                        <!-- Add Export button below settlement results -->
-                        <div class="mt-4">
-                            <button class="btn btn-teal" onclick="exportToPDF()">
-                                <i class="bi bi-file-earmark-pdf me-1"></i>Export Report to PDF
-                            </button>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Expense Entry Template -->
-<template id="expenseTemplate">
-    <div class="col-12">
-        <div class="expense-entry card shadow-sm h-100">
-            <div class="card-header bg-light">
-                <h5 class="mb-0"><i class="bi bi-receipt me-2"></i>New Expense</h5>
-            </div>
-            <div class="card-body">
-                <div class="mb-4">
-                    <label class="form-label fw-bold">Description<span class="text-danger">*</span></label>
-                    <input type="text" class="form-control expense-description" placeholder="What was this expense for?">
-                    <div class="form-text">Enter a clear description of the expense</div>
-                </div>
-                
-                <div class="mb-4">
-                    <div class="d-flex align-items-center">
-                        <label for="displayCurrencyMain" class="form-label fw-bold me-2 mb-0">Display Currency:</label>
-                        <select class="form-select display-currency-select currency-select-wide" id="displayCurrencyMain" style="max-width: 200px;" onchange="updateTotals(this)">
-                            <!-- Currency options will be populated dynamically -->
-                        </select>
-                    </div>
-                    <div class="form-text">Choose the currency shown in the expenses table for the expense below (regardless of input currency)</div>
-                </div>
-                
-                <div class="row g-4 justify-content-between">
-                    <div class="col-md-5">
-                        <div class="card border-primary mb-3">
-                            <div class="card-header bg-primary text-white">
-                                <h5 class="mb-0"><i class="bi bi-credit-card me-2"></i>Who Paid</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="payers-list mb-3"></div>
-                                <button class="btn btn-outline-primary btn-sm" onclick="addPayer(this)">
-                                    <i class="bi bi-plus-lg me-1"></i>Add Payer
-                                </button>
-                                <div class="mt-3 pt-2 border-top">
-                                    <strong>Total Paid: </strong><span class="total-paid badge bg-primary">0.00</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-5">
-                        <div class="card border-success mb-3">
-                            <div class="card-header bg-success text-white">
-                                <div class="d-flex align-items-center justify-content-between">
-                                    <h5 class="mb-0"><i class="bi-diagram-3 me-2"></i>Split Between</h5>
-                                    <button class="btn btn-sm btn-light" onclick="splitEvenly(this)">
-                                        <i class="bi bi-distribute-vertical me-1"></i>Split Evenly
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="card-body">
-                                <div class="splits-list mb-3"></div>
-                                <button class="btn btn-outline-success btn-sm" onclick="addSplit(this)">
-                                    <i class="bi bi-plus-lg me-1"></i>Add Split
-                                </button>
-                                <div class="mt-3 pt-2 border-top">
-                                    <strong>Total Split: </strong><span class="total-split badge bg-success">0.00</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="card-footer bg-light">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div class="amounts-mismatch-warning text-danger" style="display: none;">
-                        <i class="bi bi-exclamation-triangle me-1"></i>
-                        Amounts must match
-                    </div>
-                    <div class="btn-group">
-                        <button class="btn btn-success" onclick="saveExpense(this)">
-                            <i class="bi bi-check-lg me-1"></i>Save
-                        </button>
-                        <button class="btn btn-danger" onclick="removeExpense(this)">
-                            <i class="bi bi-trash"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</template>
+<!-- Mobile bottom tab bar -->
+<nav class="tabbar-mobile" id="mobileTabbar">
+    <button type="button" class="active" data-action="switch-tab" data-tab="add">
+        <i class="bi bi-plus-circle-fill" id="tabAddIconMobile"></i><span id="tabAddLabelMobile">Add</span>
+    </button>
+    <button type="button" data-action="switch-tab" data-tab="view">
+        <i class="bi bi-list-ul"></i><span>Expenses</span>
+    </button>
+    <button type="button" data-action="switch-tab" data-tab="settle">
+        <i class="bi bi-arrow-left-right"></i><span>Settle</span>
+    </button>
+</nav>
 
-<!-- Payer Entry Template -->
-<template id="payerTemplate">
-    <div class="payer-entry input-group mb-2">
-        <select class="form-select payer-select">
-            <!-- Options will be populated dynamically -->
-        </select>
-        <input type="number" class="form-control amount-input" step="0.01" placeholder="Amount" onchange="updateTotals(this)">
-        <select class="form-select currency-select" onchange="updateTotals(this)">
-            <option value="USD">USD</option>
-            <option value="EUR">EUR</option>
-            <option value="GBP">GBP</option>
-            <option value="JPY">JPY</option>
-            <option value="AUD">AUD</option>
-        </select>
-        <button class="btn btn-outline-danger" onclick="removePayer(this)">×</button>
-    </div>
-</template>
-
-<!-- Split Entry Template -->
-<template id="splitTemplate">
-    <div class="split-entry input-group mb-2">
-        <select class="form-select split-select">
-            <!-- Options will be populated dynamically -->
-        </select>
-        <input type="number" class="form-control amount-input" step="0.01" placeholder="Amount" onchange="updateTotals(this)">
-        <select class="form-select currency-select" onchange="updateTotals(this)">
-            <option value="USD">USD</option>
-            <option value="EUR">EUR</option>
-            <option value="GBP">GBP</option>
-            <option value="JPY">JPY</option>
-            <option value="AUD">AUD</option>
-        </select>
-        <button class="btn btn-outline-danger" onclick="removeSplit(this)">×</button>
+<!-- Payer / split row template -->
+<template id="entryRowTemplate">
+    <div class="entry-row">
+        <select class="person-select select-ledger" aria-label="Person"></select>
+        <input type="text" inputmode="decimal" class="amount-input input-ledger" placeholder="0.00" aria-label="Amount" autocomplete="off">
+        <select class="currency-select select-ledger" aria-label="Currency"></select>
+        <button type="button" class="row-x" data-action="remove-row" aria-label="Remove row"><i class="bi bi-x"></i></button>
     </div>
 </template>
 {% endblock %}
