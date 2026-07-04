@@ -487,10 +487,8 @@ button:focus-visible, a:focus-visible {
     .tabs-ledger { display: none; }
     .tabbar-mobile { display: flex; }
     body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
-    .header-inner { flex-wrap: wrap; }
-    .header-actions { width: 100%; }
-    .share-pill { flex: 1; min-width: 0; }
-    .share-pill__url { flex: 1; }
+    .share-pill { display: none; }
+    .header-note { text-align: left; margin-top: 14px; }
     /* Prevent iOS focus zoom */
     .input-ledger, .select-ledger, .chip-input { font-size: 16px; }
     .input-title { font-size: 20px; }
