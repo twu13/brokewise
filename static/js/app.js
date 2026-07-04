@@ -481,6 +481,37 @@ async function getConvertedCents(entry, displayCurrency) {
     return amountToCents(amount * rate);
 }
 
+
+async function findCurrencyCentsForDisplayCents(displayCents, targetCurrency, exactDisplayCents = null) {
+    const displayToTargetRate = await getExchangeRate(DISPLAY_CURRENCY, targetCurrency);
+    const targetToDisplayRate = await getExchangeRate(targetCurrency, DISPLAY_CURRENCY);
+    const estimatedTargetCents = amountToCents((displayCents / 100) * displayToTargetRate);
+    const targetDisplayCents = exactDisplayCents === null ? displayCents : exactDisplayCents;
+
+    let bestTargetCents = Math.max(0, estimatedTargetCents);
+    let bestDisplayCents = amountToCents((bestTargetCents / 100) * targetToDisplayRate);
+    let bestDistance = Math.abs(bestDisplayCents - targetDisplayCents);
+
+    // Rounding the target currency to two decimals can move the converted USD
+    // amount by a few cents. Search near the estimate so split-evenly values
+    // round to editable currency amounts while still matching the paid total.
+    const searchRadius = 1000;
+    const start = Math.max(1, estimatedTargetCents - searchRadius);
+    const end = Math.max(start, estimatedTargetCents + searchRadius);
+    for (let targetCents = start; targetCents <= end; targetCents++) {
+        const convertedDisplayCents = amountToCents((targetCents / 100) * targetToDisplayRate);
+        const distance = Math.abs(convertedDisplayCents - targetDisplayCents);
+        if (distance < bestDistance || (distance === bestDistance && targetCents < bestTargetCents)) {
+            bestTargetCents = targetCents;
+            bestDisplayCents = convertedDisplayCents;
+            bestDistance = distance;
+            if (bestDistance === 0) break;
+        }
+    }
+
+    return { targetCents: bestTargetCents, displayCents: bestDisplayCents };
+}
+
 function formatCents(cents) {
     return formatNumber(cents / 100);
 }
@@ -813,13 +844,21 @@ async function splitEvenly() {
 
     const baseSplitCents = Math.floor(totalPaidCents / splitRows.length);
     const remainderCents = totalPaidCents % splitRows.length;
+    let assignedDisplayCents = 0;
 
     for (const [index, row] of splitRows.entries()) {
         const splitCents = baseSplitCents + (index < remainderCents ? 1 : 0);
         const currencySelect = row.querySelector('.currency-select');
         const targetCurrency = currencySelect.value;
-        const rate = await getExchangeRate(DISPLAY_CURRENCY, targetCurrency);
-        row.querySelector('.amount-input').value = ((splitCents / 100) * rate).toFixed(2);
+        const remainingDisplayCents = totalPaidCents - assignedDisplayCents;
+        const convertedSplit = await findCurrencyCentsForDisplayCents(
+            splitCents,
+            targetCurrency,
+            index === splitRows.length - 1 ? remainingDisplayCents : null
+        );
+
+        row.querySelector('.amount-input').value = formatCents(convertedSplit.targetCents);
+        assignedDisplayCents += convertedSplit.displayCents;
         clearEntryValidation(row);
     }
 
