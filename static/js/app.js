@@ -814,12 +814,14 @@ async function splitEvenly() {
     const baseSplitCents = Math.floor(totalPaidCents / splitRows.length);
     const remainderCents = totalPaidCents % splitRows.length;
 
-    splitRows.forEach((row, index) => {
+    for (const [index, row] of splitRows.entries()) {
         const splitCents = baseSplitCents + (index < remainderCents ? 1 : 0);
-        row.querySelector('.amount-input').value = (splitCents / 100).toFixed(2);
-        row.querySelector('.currency-select').value = DISPLAY_CURRENCY;
+        const currencySelect = row.querySelector('.currency-select');
+        const targetCurrency = currencySelect.value;
+        const rate = await getExchangeRate(DISPLAY_CURRENCY, targetCurrency);
+        row.querySelector('.amount-input').value = ((splitCents / 100) * rate).toFixed(2);
         clearEntryValidation(row);
-    });
+    }
 
     recomputeTotalsIndicator();
 }
