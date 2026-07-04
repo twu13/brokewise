@@ -235,7 +235,7 @@ def expense_group(group_id):
     else:
         group.last_accessed = datetime.now(UTC)
         db.session.commit()
-    return render_template("index.html", group_id=group_id)
+    return render_template("index.html", group_id=group_id, has_people=bool(group.participants))
 
 
 @app.route("/api/g/<group_id>", methods=["GET"])

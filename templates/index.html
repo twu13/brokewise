@@ -28,14 +28,14 @@
 
 <!-- Add / Edit expense -->
 <div class="tab-pane" id="pane-add">
-    <div class="card-ledger--empty" id="addEmptyState" hidden>
+    <div class="card-ledger--empty" id="addEmptyState"{% if has_people %} hidden{% endif %}>
         <i class="bi bi-people empty-icon"></i>
         <div class="empty-title">Add people first</div>
         <div class="empty-body">Expenses need someone to pay and someone to split with. Add the people in your group above to get started.</div>
         <button type="button" class="btn-ledger" data-action="start-add-person"><i class="bi bi-plus"></i>Add a person</button>
     </div>
 
-    <div class="card-ledger expense-form" id="expenseForm">
+    <div class="card-ledger expense-form" id="expenseForm"{% if not has_people %} hidden{% endif %}>
         <input type="text" class="input-title" id="expenseDescription" placeholder="What was this expense for?" autocomplete="off">
 
         <div class="form-grid">
@@ -64,7 +64,7 @@
             </div>
         </div>
     </div>
-    <div class="helper-text" id="addHelperText"><i class="bi bi-info-circle"></i>Amounts can be in any currency — they're converted automatically.</div>
+    <div class="helper-text" id="addHelperText"{% if not has_people %} hidden{% endif %}><i class="bi bi-info-circle"></i>Amounts can be in any currency — they're converted automatically.</div>
 </div>
 
 <!-- Expenses -->
